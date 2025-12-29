@@ -38,7 +38,39 @@ sites.get('/', async (c) => {
     return c.json({ sites: sitesResponse });
 });
 
-// GET /api/v1/sites/:id - Get site details
+// GET /api/v1/sites/overview - Get all sites with stats in single call (optimized for dashboard)
+sites.get('/overview', async (c) => {
+    const user = await getAuthUser(c);
+    if (!user) {
+        return c.json({ error: 'Authentication required' }, 401);
+    }
+
+    const db = new Database(c.env.DB);
+    const { sites: userSites, aggregated } = await db.getSitesWithStats(user.id);
+
+    // Don't expose full API keys
+    const sitesResponse = userSites.map((site) => ({
+        id: site.id,
+        name: site.name,
+        domain: site.domain,
+        api_key_preview: site.api_key.slice(0, 8) + '...',
+        created_at: site.created_at,
+        updated_at: site.updated_at,
+        stats: {
+            total_pages: site.total_pages,
+            total_comments: site.total_comments,
+            pending_comments: site.pending_comments,
+            total_likes: site.total_likes,
+        },
+    }));
+
+    return c.json({
+        sites: sitesResponse,
+        aggregated,
+    });
+});
+
+// GET /api/v1/sites/:id - Get site details with stats and comments (optimized)
 sites.get('/:id', async (c) => {
     const user = await getAuthUser(c);
     if (!user) {
@@ -50,26 +82,43 @@ sites.get('/:id', async (c) => {
         return c.json({ error: 'Invalid site_id' }, 400);
     }
 
-    const db = new Database(c.env.DB);
-    const site = await db.getSiteById(siteId);
+    // Parse query params for comments
+    const commentStatus = c.req.query('comment_status');
+    const commentLimit = parseInt(c.req.query('comment_limit') || '50');
+    const commentOffset = parseInt(c.req.query('comment_offset') || '0');
+    const includeComments = c.req.query('include_comments') !== 'false';
 
-    if (!site) {
+    const db = new Database(c.env.DB);
+
+    // Single optimized call for site, stats, and comments
+    const result = await db.getSiteWithDetails(siteId, {
+        status: commentStatus,
+        limit: commentLimit,
+        offset: commentOffset,
+    });
+
+    if (!result || !result.site) {
         return c.json({ error: 'Site not found' }, 404);
     }
 
     // Check ownership
-    if (site.owner_id !== user.id) {
+    if (result.site.owner_id !== user.id) {
         return c.json({ error: 'Forbidden' }, 403);
     }
 
     return c.json({
-        id: site.id,
-        name: site.name,
-        domain: site.domain,
-        api_key: site.api_key,
-        settings: JSON.parse(site.settings || '{}'),
-        created_at: site.created_at,
-        updated_at: site.updated_at,
+        id: result.site.id,
+        name: result.site.name,
+        domain: result.site.domain,
+        api_key: result.site.api_key,
+        settings: JSON.parse(result.site.settings || '{}'),
+        created_at: result.site.created_at,
+        updated_at: result.site.updated_at,
+        stats: result.stats,
+        ...(includeComments && {
+            comments: result.comments.comments,
+            comments_total: result.comments.total,
+        }),
     });
 });
 

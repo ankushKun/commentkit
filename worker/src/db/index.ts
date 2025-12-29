@@ -89,36 +89,83 @@ export class Database {
         pending_comments: number;
         total_likes: number;
     }> {
-        const pagesResult = await this.db
-            .prepare('SELECT COUNT(*) as count FROM pages WHERE site_id = ?')
-            .bind(siteId)
-            .first<{ count: number }>();
-
-        const commentsResult = await this.db
-            .prepare('SELECT COUNT(*) as count FROM comments WHERE site_id = ?')
-            .bind(siteId)
-            .first<{ count: number }>();
-
-        const pendingResult = await this.db
-            .prepare("SELECT COUNT(*) as count FROM comments WHERE site_id = ? AND status = 'pending'")
-            .bind(siteId)
-            .first<{ count: number }>();
-
-        const likesResult = await this.db
-            .prepare(
-                `SELECT COUNT(*) as count FROM page_likes pl
-                 JOIN pages p ON pl.page_id = p.id
-                 WHERE p.site_id = ?`
-            )
-            .bind(siteId)
-            .first<{ count: number }>();
+        // Single query with subqueries instead of 4 separate queries
+        const result = await this.db
+            .prepare(`
+                SELECT
+                    (SELECT COUNT(*) FROM pages WHERE site_id = ?) as total_pages,
+                    (SELECT COUNT(*) FROM comments WHERE site_id = ?) as total_comments,
+                    (SELECT COUNT(*) FROM comments WHERE site_id = ? AND status = 'pending') as pending_comments,
+                    (SELECT COUNT(*) FROM page_likes pl JOIN pages p ON pl.page_id = p.id WHERE p.site_id = ?) as total_likes
+            `)
+            .bind(siteId, siteId, siteId, siteId)
+            .first<{ total_pages: number; total_comments: number; pending_comments: number; total_likes: number }>();
 
         return {
-            total_pages: pagesResult?.count ?? 0,
-            total_comments: commentsResult?.count ?? 0,
-            pending_comments: pendingResult?.count ?? 0,
-            total_likes: likesResult?.count ?? 0,
+            total_pages: result?.total_pages ?? 0,
+            total_comments: result?.total_comments ?? 0,
+            pending_comments: result?.pending_comments ?? 0,
+            total_likes: result?.total_likes ?? 0,
         };
+    }
+
+    // Get all sites for an owner with aggregated stats in a single query
+    async getSitesWithStats(ownerId: number): Promise<{
+        sites: (Site & { total_pages: number; total_comments: number; pending_comments: number; total_likes: number })[];
+        aggregated: { total_pages: number; total_comments: number; pending_comments: number; total_likes: number };
+    }> {
+        const sites = await this.db
+            .prepare(`
+                SELECT
+                    s.*,
+                    COALESCE((SELECT COUNT(*) FROM pages WHERE site_id = s.id), 0) as total_pages,
+                    COALESCE((SELECT COUNT(*) FROM comments WHERE site_id = s.id), 0) as total_comments,
+                    COALESCE((SELECT COUNT(*) FROM comments WHERE site_id = s.id AND status = 'pending'), 0) as pending_comments,
+                    COALESCE((SELECT COUNT(*) FROM page_likes pl JOIN pages p ON pl.page_id = p.id WHERE p.site_id = s.id), 0) as total_likes
+                FROM sites s
+                WHERE s.owner_id = ?
+                ORDER BY s.created_at DESC
+            `)
+            .bind(ownerId)
+            .all<Site & { total_pages: number; total_comments: number; pending_comments: number; total_likes: number }>();
+
+        // Calculate aggregated stats
+        const aggregated = sites.results.reduce(
+            (acc, site) => ({
+                total_pages: acc.total_pages + site.total_pages,
+                total_comments: acc.total_comments + site.total_comments,
+                pending_comments: acc.pending_comments + site.pending_comments,
+                total_likes: acc.total_likes + site.total_likes,
+            }),
+            { total_pages: 0, total_comments: 0, pending_comments: 0, total_likes: 0 }
+        );
+
+        return { sites: sites.results, aggregated };
+    }
+
+    // Get site with details, stats, and comments in optimized queries
+    async getSiteWithDetails(
+        siteId: number,
+        commentOptions: { status?: string; limit?: number; offset?: number } = {}
+    ): Promise<{
+        site: Site | null;
+        stats: { total_pages: number; total_comments: number; pending_comments: number; total_likes: number };
+        comments: { comments: Comment[]; total: number };
+    } | null> {
+        const { status, limit = 50, offset = 0 } = commentOptions;
+
+        // Fetch site and stats in parallel
+        const [site, stats] = await Promise.all([
+            this.getSiteById(siteId),
+            this.getSiteStats(siteId),
+        ]);
+
+        if (!site) return null;
+
+        // Fetch comments
+        const comments = await this.getCommentsBySite(siteId, { status, limit, offset });
+
+        return { site, stats, comments };
     }
 
     // ==========================================

@@ -16,10 +16,170 @@ async function hashEmail(email: string): Promise<string> {
     return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-// GET /api/v1/sites/:siteId/pages/:slug - Get page comments + likes
+// GET /api/v1/sites/comments - Get page comments by domain and pageId
+comments.get('/comments', async (c) => {
+    const domain = c.req.query('domain');
+    const pageId = c.req.query('pageId');
+    const pageTitle = c.req.query('title') || '';
+    const pageUrl = c.req.query('url') || '';
+
+    if (!domain) {
+        return c.json({ error: 'domain parameter is required' }, 400);
+    }
+
+    if (!pageId) {
+        return c.json({ error: 'pageId parameter is required' }, 400);
+    }
+
+    const db = new Database(c.env.DB);
+
+    // Get site by domain
+    const site = await db.getSiteByDomain(domain);
+    if (!site) {
+        return c.json({ error: 'Site not found for domain: ' + domain }, 404);
+    }
+
+    // Get user ID from auth if present
+    const authUser = await getAuthUser(c);
+    const userId = authUser?.id;
+
+    // Get page by pageId (which is the full URL or custom identifier)
+    const page = await db.getPageBySlug(site.id, pageId);
+
+    // If page doesn't exist, return empty state
+    if (!page) {
+        const response: PageResponse = {
+            page_id: 0,
+            slug: pageId,
+            title: pageTitle || null,
+            comment_count: 0,
+            likes: 0,
+            user_liked: false,
+            comments: [],
+        };
+        return c.json(response);
+    }
+
+    // Get comments
+    const pageComments = await db.getCommentsByPage(page.id);
+
+    // Get like stats for all comments
+    const commentIds = pageComments.map((comment) => comment.id);
+    const likeStats = await db.getCommentLikeStatsBatch(commentIds, userId);
+
+    // Get page like stats
+    const pageLikes = await db.getPageLikeStats(page.id, userId);
+    const commentCount = await db.getCommentCount(page.id);
+
+    // Build response
+    const commentResponses: CommentResponse[] = await Promise.all(
+        pageComments.map(async (comment) => {
+            const stats = likeStats.get(comment.id) ?? { total_likes: 0, user_liked: false };
+            return {
+                id: comment.id,
+                author_name: comment.author_name ?? '',
+                author_email_hash: comment.author_email ? await hashEmail(comment.author_email) : null,
+                content: comment.content,
+                parent_id: comment.parent_id,
+                likes: stats.total_likes,
+                user_liked: stats.user_liked,
+                created_at: comment.created_at,
+                replies: [],
+            };
+        })
+    );
+
+    const response: PageResponse = {
+        page_id: page.id,
+        slug: pageId,
+        title: page.title,
+        comment_count: commentCount,
+        likes: pageLikes.total_likes,
+        user_liked: pageLikes.user_liked,
+        comments: commentResponses,
+    };
+
+    return c.json(response);
+});
+
+// POST /api/v1/sites/comments - Create comment by domain and pageId
+const createCommentByDomainSchema = z.object({
+    domain: z.string().min(1),
+    pageId: z.string().min(1),
+    author_name: z.string().optional(),
+    author_email: z.string().email().optional(),
+    content: z.string().min(1),
+    parent_id: z.number().optional(),
+    page_title: z.string().optional(),
+    page_url: z.string().optional(),
+});
+
+comments.post('/comments', zValidator('json', createCommentByDomainSchema), async (c) => {
+    const body = c.req.valid('json');
+    const db = new Database(c.env.DB);
+
+    // Get site by domain
+    const site = await db.getSiteByDomain(body.domain);
+    if (!site) {
+        return c.json({ error: 'Site not found for domain: ' + body.domain }, 404);
+    }
+
+    // Get or create page using pageId as the slug
+    const page = await db.getOrCreatePage(site.id, body.pageId, body.page_title, body.page_url);
+
+    // Get auth user if present
+    const authUser = await getAuthUser(c);
+
+    // Validate: either authenticated or has author_name
+    let userId: number | undefined;
+    let authorName: string | undefined;
+
+    if (authUser) {
+        userId = authUser.id;
+        authorName = authUser.display_name ?? authUser.email;
+    } else {
+        if (!body.author_name?.trim()) {
+            return c.json({ error: 'author_name is required for anonymous comments' }, 400);
+        }
+        authorName = body.author_name;
+    }
+
+    // Get client info
+    const ipAddress = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For');
+    const userAgent = c.req.header('User-Agent');
+
+    const comment = await db.createComment({
+        siteId: site.id,
+        pageId: page.id,
+        userId,
+        authorName,
+        authorEmail: body.author_email,
+        parentId: body.parent_id,
+        content: body.content,
+        ipAddress: ipAddress ?? undefined,
+        userAgent: userAgent ?? undefined,
+    });
+
+    const response: CommentResponse = {
+        id: comment.id,
+        author_name: comment.author_name ?? '',
+        author_email_hash: comment.author_email ? await hashEmail(comment.author_email) : null,
+        content: comment.content,
+        parent_id: comment.parent_id,
+        likes: 0,
+        user_liked: false,
+        created_at: comment.created_at,
+        replies: [],
+    };
+
+    return c.json(response, 201);
+});
+
+// GET /api/v1/sites/:siteId/pages/:slug - Get page comments + likes (legacy route)
 comments.get('/:siteId/pages/:slug', async (c) => {
     const siteId = parseInt(c.req.param('siteId'));
     const slug = c.req.param('slug');
+    const pageTitle = c.req.query('title') || '';
 
     if (isNaN(siteId)) {
         return c.json({ error: 'Invalid site_id' }, 400);
@@ -33,15 +193,27 @@ comments.get('/:siteId/pages/:slug', async (c) => {
         return c.json({ error: 'Site not found' }, 404);
     }
 
-    // Get page
-    const page = await db.getPageBySlug(site.id, slug);
-    if (!page) {
-        return c.json({ error: 'Page not found' }, 404);
-    }
-
     // Get user ID from auth if present
     const authUser = await getAuthUser(c);
     const userId = authUser?.id;
+
+    // Get page (may not exist yet - that's OK!)
+    const page = await db.getPageBySlug(site.id, slug);
+
+    // If page doesn't exist, return empty state
+    // Page will be created when first comment is posted
+    if (!page) {
+        const response: PageResponse = {
+            page_id: 0, // No page yet
+            slug: slug,
+            title: pageTitle || null,
+            comment_count: 0,
+            likes: 0,
+            user_liked: false,
+            comments: [],
+        };
+        return c.json(response);
+    }
 
     // Get comments
     const pageComments = await db.getCommentsByPage(page.id);

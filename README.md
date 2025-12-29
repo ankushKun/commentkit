@@ -68,6 +68,49 @@ This starts a local server at `http://localhost:8787`.
 bun run deploy
 ```
 
+## Embedding CommentKit
+
+### Simple Embed (Recommended)
+
+Just add this to any page where you want comments:
+
+```html
+<div id="commentkit"></div>
+<script src="https://your-frontend-url.com/commentkit.js"></script>
+```
+
+That's it! CommentKit will automatically:
+- Detect your site by domain
+- Use the current page URL as the identifier
+- Load and display comments for that page
+
+### Custom Page Identifier
+
+If your URLs change but you want to keep the same comments, use a custom page ID:
+
+```html
+<div id="commentkit"></div>
+<script src="https://your-frontend-url.com/commentkit.js" 
+        data-page-id="my-custom-page-id">
+</script>
+```
+
+### Advanced Configuration
+
+For more control, use the configuration function:
+
+```html
+<div id="commentkit"></div>
+<script>
+  var commentkit_config = function () {
+    this.page.identifier = 'unique-page-id';  // Custom identifier
+    this.page.title = 'My Page Title';        // Page title
+    this.page.url = 'https://example.com/page'; // Canonical URL
+  };
+</script>
+<script src="https://your-frontend-url.com/commentkit.js"></script>
+```
+
 ## API Endpoints
 
 ### Authentication
@@ -90,15 +133,19 @@ bun run deploy
 | POST   | `/api/v1/admin/sites/:id/regenerate-key` | Regenerate API key  | Yes  |
 | GET    | `/api/v1/admin/sites/:id/stats`          | Get site statistics | Yes  |
 
-### Comments
-| Method | Endpoint                            | Description               | Auth     |
-| ------ | ----------------------------------- | ------------------------- | -------- |
-| GET    | `/api/v1/sites/:id/pages/:slug`     | Get page comments + likes | No       |
-| POST   | `/api/v1/sites/:id/pages/:slug`     | Create comment            | Optional |
-| GET    | `/api/v1/sites/:id/comments`        | List all site comments    | Yes      |
-| DELETE | `/api/v1/sites/comments/:id`        | Delete comment            | Yes      |
-| PATCH  | `/api/v1/sites/comments/:id`        | Edit comment              | Yes      |
-| PATCH  | `/api/v1/sites/comments/:id/status` | Moderate comment          | Yes      |
+### Comments (Domain-Based)
+| Method | Endpoint                            | Description                       | Auth     |
+| ------ | ----------------------------------- | --------------------------------- | -------- |
+| GET    | `/api/v1/sites/comments`            | Get comments by domain & pageId   | No       |
+| POST   | `/api/v1/sites/comments`            | Create comment by domain & pageId | Optional |
+| GET    | `/api/v1/sites/:id/comments`        | List all site comments (owner)    | Yes      |
+| DELETE | `/api/v1/sites/comments/:id`        | Delete comment                    | Yes      |
+| PATCH  | `/api/v1/sites/comments/:id`        | Edit comment                      | Yes      |
+| PATCH  | `/api/v1/sites/comments/:id/status` | Moderate comment                  | Yes      |
+
+**Domain-Based Comment Endpoints:**
+- `GET /api/v1/sites/comments?domain=example.com&pageId=https://example.com/blog/post-1`
+- `POST /api/v1/sites/comments` with body: `{ domain, pageId, content, author_name, ... }`
 
 ### Likes
 | Method | Endpoint                     | Description       | Auth |

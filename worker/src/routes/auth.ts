@@ -99,18 +99,51 @@ auth.get('/verify', async (c) => {
     });
 });
 
-// GET /api/v1/auth/me - Get current user
+// GET /api/v1/auth/me - Get current user with optional bootstrap data
 auth.get('/me', async (c) => {
     const user = await getAuthUser(c);
     if (!user) {
         return c.json({ error: 'Not authenticated' }, 401);
     }
 
-    return c.json({
+    const includeBootstrap = c.req.query('bootstrap') === 'true';
+
+    const userData = {
         id: user.id,
         email: user.email,
         display_name: user.display_name,
         is_superadmin: user.is_superadmin,
+    };
+
+    if (!includeBootstrap) {
+        return c.json(userData);
+    }
+
+    // Bootstrap: include initial dashboard data to save an extra API call
+    const db = new Database(c.env.DB);
+    const { sites, aggregated } = await db.getSitesWithStats(user.id);
+
+    const sitesData = sites.map((site) => ({
+        id: site.id,
+        name: site.name,
+        domain: site.domain,
+        api_key_preview: site.api_key.slice(0, 8) + '...',
+        created_at: site.created_at,
+        updated_at: site.updated_at,
+        stats: {
+            total_pages: site.total_pages,
+            total_comments: site.total_comments,
+            pending_comments: site.pending_comments,
+            total_likes: site.total_likes,
+        },
+    }));
+
+    return c.json({
+        ...userData,
+        bootstrap: {
+            sites: sitesData,
+            aggregated,
+        },
     });
 });
 

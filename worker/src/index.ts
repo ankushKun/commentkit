@@ -35,4 +35,20 @@ app.onError((err, c) => {
     return c.json({ error: err.message || 'Internal server error' }, 500);
 });
 
-export default app;
+// Export custom fetch handler that serves static assets and routes to Hono
+export default {
+    async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+        const url = new URL(request.url);
+
+        // Serve static files from /static/* path using ASSETS binding
+        if (url.pathname.startsWith('/static/')) {
+            // Remove /static prefix and serve from assets
+            const assetPath = url.pathname.slice('/static'.length);
+            const assetUrl = new URL(assetPath || '/', url.origin);
+            return env.ASSETS.fetch(assetUrl);
+        }
+
+        // Handle all other requests with Hono app
+        return app.fetch(request, env, ctx);
+    },
+};
