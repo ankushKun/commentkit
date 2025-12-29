@@ -1,0 +1,21 @@
+name = "thread-engine"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+# D1 Database binding - run `wrangler d1 create thread-engine-db` and update the id
+[[d1_databases]]
+binding = "DB"
+database_name = "thread-engine-db"
+database_id = "YOUR_DATABASE_ID_HERE"
+
+[vars]
+ENVIRONMENT = "production"
+BASE_URL = "https://your-worker.your-subdomain.workers.dev"
+
+# Dev environment overrides
+[env.dev]
+vars = { ENVIRONMENT = "development", BASE_URL = "http://localhost:8787" }
+
+# Secrets (set via `wrangler secret put`):
+# - JWT_SECRET
+# - RESEND_API_KEY (for email)
