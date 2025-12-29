@@ -255,7 +255,7 @@ export function SitesTab() {
                 </div>
 
                 {/* Content Area */}
-                <div className="flex-1 bg-white rounded-lg border border-slate-200 shadow-sm min-h-[400px]">
+                <div className="flex-1 bg-white rounded-lg border border-slate-200 shadow-sm min-h-100">
                     {filteredComments.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-20 text-center h-full">
                             <div className="h-32 w-32 bg-slate-50 rounded-full flex items-center justify-center mb-6">

@@ -77,7 +77,11 @@
                 loginEmail: '',          // Email entered for login
                 loginSent: false,        // Magic link sent
                 authLoading: false,      // Auth action in progress
+                expandedReplies: new Set(),  // Track which comments have expanded replies
             };
+            this.commentMap = new Map();  // Store comment data by ID for quick access
+            this.scrollAnchor = null;  // Element to anchor scroll position to
+            this.isRefreshing = false;  // Track if we're refreshing vs initial load
 
             this.init();
         }
@@ -362,11 +366,6 @@
                     margin-top: 40px;
                 }
 
-                .ck-comment {
-                    margin-bottom: 32px;
-                    animation: ck-fade-in 0.3s ease-out;
-                }
-                
                 @keyframes ck-fade-in {
                     from { opacity: 0; transform: translateY(10px); }
                     to { opacity: 1; transform: translateY(0); }
@@ -451,14 +450,6 @@
                     color: var(--ck-danger);
                 }
 
-                /* Threaded Replies */
-                .ck-replies {
-                    margin-top: 24px;
-                    margin-left: 20px;
-                    padding-left: 24px;
-                    border-left: 2px solid #f3f4f6;
-                }
-
                 /* States */
                 .ck-empty, .ck-loading {
                     text-align: center;
@@ -493,18 +484,88 @@
                     padding-top: 24px;
                     border-top: 1px solid var(--ck-border);
                     text-align: center;
-                    font-size: 0.8px;
+                    font-size: 0.8rem;
                     color: #9ca3af;
-                }
-                
-                .ck-footer a {
-                    color: #d1d5db;
-                    text-decoration: none;
-                    transition: color 0.15s;
                 }
                 
                 .ck-footer a:hover {
                     color: #9ca3af;
+                }
+
+                /* Simple Flat Threading */
+                .ck-comment {
+                    position: relative;
+                    margin-bottom: 24px;
+                    animation: ck-fade-in 0.3s ease-out;
+                }
+
+                /* Disable animation during refresh to prevent all comments from re-animating */
+                .ck-refreshing .ck-comment {
+                    animation: none;
+                }
+
+                .ck-replies {
+                    margin-top: 16px;
+                    margin-left: 56px; /* Align with parent comment content */
+                }
+
+                /* Reply count indicator */
+                .ck-reply-count {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 8px;
+                    margin-top: 12px;
+                    padding: 6px 12px;
+                    background: var(--ck-bg-muted);
+                    border: 1px solid var(--ck-border);
+                    border-radius: 20px;
+                    cursor: pointer;
+                    font-size: 0.875rem;
+                    font-weight: 500;
+                    color: var(--ck-text);
+                    transition: all 0.2s;
+                }
+
+                .ck-reply-count:hover {
+                    background: #e5e7eb;
+                }
+
+                .ck-reply-count .ck-reply-avatar {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 50%;
+                    background: #eff6ff;
+                    color: var(--ck-primary);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-weight: 700;
+                    font-size: 0.7rem;
+                    border: 1px solid #dbeafe;
+                }
+
+                /* Inline reply form */
+                .ck-inline-reply-form {
+                    animation: ck-fade-in 0.3s ease-out;
+                }
+
+                .ck-inline-reply-form .ck-form {
+                    padding: 16px;
+                    background: var(--ck-bg-muted);
+                    border-radius: var(--ck-radius);
+                    border: 1px solid var(--ck-border);
+                }
+
+                .ck-inline-reply-form .ck-user-info {
+                    margin-bottom: 12px;
+                }
+
+                .ck-inline-reply-form .ck-form-group {
+                    margin-bottom: 12px;
+                }
+
+                .ck-inline-reply-form textarea {
+                    min-height: 80px;
                 }
             `;
             document.head.appendChild(style);
@@ -552,7 +613,7 @@
                     case 'commentPosted':
                         this.state.loginSent = false;
                         this.state.authMode = 'guest';
-                        this.loadComments();
+                        this.refreshComments();
                         break;
                     case 'authStateChanged':
                         this.state.user = event.data.user || null;
@@ -589,6 +650,18 @@
             });
         }
 
+        refreshComments() {
+            // Refresh comments without showing loading state
+            this.isRefreshing = true;
+            this.sendToIframe({
+                action: 'loadComments',
+                domain: this.config.domain,
+                pageId: this.config.pageId,
+                pageTitle: this.config.pageTitle,
+                pageUrl: this.config.pageUrl,
+            });
+        }
+
         postComment(data) {
             this.sendToIframe({
                 action: 'postComment',
@@ -611,6 +684,20 @@
         }
 
         render() {
+            // Save scroll anchor if needed (element-based scroll preservation)
+            let scrollAnchorData = null;
+            if (this.scrollAnchor) {
+                // Find the anchor element before re-render
+                const anchorElement = this.container.querySelector(`.ck-comment[data-id="${this.scrollAnchor}"]`);
+                if (anchorElement) {
+                    const rect = anchorElement.getBoundingClientRect();
+                    scrollAnchorData = {
+                        commentId: this.scrollAnchor,
+                        offsetFromTop: rect.top + window.pageYOffset
+                    };
+                }
+            }
+
             if (this.state.loading) {
                 this.container.innerHTML = `
                     <div class="ck-widget">
@@ -636,7 +723,7 @@
             const commentTree = this.buildTree(this.state.comments);
 
             this.container.innerHTML = `
-                <div class="ck-widget">
+                <div class="ck-widget${this.isRefreshing ? ' ck-refreshing' : ''}">
                     <div class="ck-header">
                         <div class="ck-title">
                             Discussion
@@ -660,10 +747,28 @@
             `;
 
             this.attachEventListeners();
+
+            // Restore scroll position relative to anchor element
+            if (scrollAnchorData) {
+                requestAnimationFrame(() => {
+                    const anchorElement = this.container.querySelector(`.ck-comment[data-id="${scrollAnchorData.commentId}"]`);
+                    if (anchorElement) {
+                        const rect = anchorElement.getBoundingClientRect();
+                        const newOffsetFromTop = rect.top + window.pageYOffset;
+                        const currentScroll = window.pageYOffset;
+                        const scrollDelta = newOffsetFromTop - scrollAnchorData.offsetFromTop;
+                        window.scrollTo(0, currentScroll + scrollDelta);
+                    }
+                    this.scrollAnchor = null;
+                });
+            }
+
+            // Reset refreshing flag after render
+            this.isRefreshing = false;
         }
 
         renderForm() {
-            const { user, authMode, loginSent, loginEmail, replyTo } = this.state;
+            const { user, authMode, loginSent, loginEmail } = this.state;
 
             // If user is authenticated, show simplified form
             if (user) {
@@ -671,7 +776,7 @@
                 const initials = displayName.charAt(0).toUpperCase();
                 return `
                     <div class="ck-form">
-                        <h3>${replyTo ? 'Write a Reply' : 'Leave a Comment'}</h3>
+                        <h3>Leave a Comment</h3>
                         <div class="ck-user-info">
                             <div class="ck-avatar">${initials}</div>
                             <div class="ck-user-details">
@@ -682,11 +787,10 @@
                         </div>
                         <form id="ck-comment-form">
                             <div class="ck-form-group">
-                                <textarea id="ck-content" name="content" required placeholder="${replyTo ? 'Write a reply...' : 'Share your thoughts...'}"></textarea>
+                                <textarea id="ck-content" name="content" required placeholder="Share your thoughts..."></textarea>
                             </div>
                             <div style="display: flex; gap: 8px;">
                                 <button type="submit" class="ck-btn ck-btn-primary">Post Comment</button>
-                                ${replyTo ? '<button type="button" id="ck-cancel-reply" class="ck-btn ck-btn-secondary">Cancel</button>' : ''}
                             </div>
                         </form>
                     </div>
@@ -710,7 +814,7 @@
             // Show auth toggle and appropriate form
             return `
                 <div class="ck-form">
-                    <h3>${replyTo ? 'Write a Reply' : 'Leave a Comment'}</h3>
+                    <h3>Leave a Comment</h3>
                     <div class="ck-auth-toggle">
                         <button type="button" id="ck-mode-guest" class="${authMode === 'guest' ? 'active' : ''}">Comment as Guest</button>
                         <button type="button" id="ck-mode-login" class="${authMode === 'login' ? 'active' : ''}">Sign in to Comment</button>
@@ -735,11 +839,10 @@
                     </div>
                     <div class="ck-form-group">
                         <label for="ck-content">Comment *</label>
-                        <textarea id="ck-content" name="content" required placeholder="${this.state.replyTo ? 'Write a reply...' : 'Share your thoughts...'}"></textarea>
+                        <textarea id="ck-content" name="content" required placeholder="Share your thoughts..."></textarea>
                     </div>
                     <div style="display: flex; gap: 8px;">
                         <button type="submit" class="ck-btn ck-btn-primary">Post Comment</button>
-                        ${this.state.replyTo ? '<button type="button" id="ck-cancel-reply" class="ck-btn ck-btn-secondary">Cancel</button>' : ''}
                     </div>
                 </form>
             `;
@@ -779,6 +882,9 @@
             const initials = comment.author_name ? comment.author_name.charAt(0).toUpperCase() : '?';
             const timeAgo = this.formatTimeAgo(comment.created_at);
             const isLiked = false; // TODO: Track user likes
+            const hasReplies = comment.replies && comment.replies.length > 0;
+            const replyCount = hasReplies ? comment.replies.length : 0;
+            const isExpanded = this.state.expandedReplies.has(comment.id);
 
             return `
                 <div class="ck-comment" data-id="${comment.id}">
@@ -792,23 +898,24 @@
                             <div class="ck-comment-body">${this.escapeHtml(comment.content)}</div>
                             <div class="ck-comment-actions">
                                 <button class="ck-comment-action ${isLiked ? 'liked' : ''}">
+                                    ${comment.likes > 0 ? `<span>${comment.likes}</span>` : ''}
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
                                     </svg>
-                                    ${comment.likes > 0 ? comment.likes : 'Like'}
                                 </button>
-                                ${depth === 0 ? `
-                                    <button class="ck-comment-action ck-reply-btn" data-id="${comment.id}">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                                        </svg>
-                                        Reply
-                                    </button>
-                                ` : ''}
+                                <button class="ck-comment-action ck-reply-btn" data-id="${comment.id}">
+                                    Reply
+                                </button>
                             </div>
+                            ${hasReplies && !isExpanded ? `
+                                <button class="ck-reply-count" data-id="${comment.id}" aria-label="Toggle replies">
+                                    <div class="ck-reply-avatar">${comment.replies[0].author_name.charAt(0).toUpperCase()}</div>
+                                    <span>${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>
+                                </button>
+                            ` : ''}
                         </div>
                     </div>
-                    ${comment.replies && comment.replies.length > 0 ? `
+                    ${hasReplies && isExpanded ? `
                         <div class="ck-replies">
                             ${comment.replies.map(r => this.renderComment(r, depth + 1)).join('')}
                         </div>
@@ -817,8 +924,65 @@
             `;
         }
 
+        renderInlineReplyForm(parentId) {
+            const { user } = this.state;
+
+            if (user) {
+                const displayName = user.display_name || user.email.split('@')[0];
+                const initials = displayName.charAt(0).toUpperCase();
+                return `
+                    <div class="ck-inline-reply-form" style="margin-left: 56px; margin-top: 16px; margin-bottom: 16px;">
+                        <div class="ck-form">
+                            <div class="ck-user-info">
+                                <div class="ck-avatar">${initials}</div>
+                                <div class="ck-user-details">
+                                    <div class="ck-user-name">${this.escapeHtml(displayName)}</div>
+                                </div>
+                            </div>
+                            <form class="ck-reply-form" data-parent-id="${parentId}">
+                                <div class="ck-form-group">
+                                    <textarea class="ck-reply-textarea" name="content" required placeholder="Write a reply..."></textarea>
+                                </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <button type="submit" class="ck-btn ck-btn-primary">Post Reply</button>
+                                    <button type="button" class="ck-cancel-inline-reply ck-btn ck-btn-secondary">Cancel</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="ck-inline-reply-form" style="margin-left: 56px; margin-top: 16px; margin-bottom: 16px;">
+                    <div class="ck-form">
+                        <form class="ck-reply-form" data-parent-id="${parentId}">
+                            <div class="ck-form-row">
+                                <div class="ck-form-group">
+                                    <label>Name *</label>
+                                    <input type="text" name="name" required placeholder="Your name">
+                                </div>
+                                <div class="ck-form-group">
+                                    <label>Email (optional)</label>
+                                    <input type="email" name="email" placeholder="your@email.com">
+                                </div>
+                            </div>
+                            <div class="ck-form-group">
+                                <label>Reply *</label>
+                                <textarea class="ck-reply-textarea" name="content" required placeholder="Write a reply..."></textarea>
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <button type="submit" class="ck-btn ck-btn-primary">Post Reply</button>
+                                <button type="button" class="ck-cancel-inline-reply ck-btn ck-btn-secondary">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+        }
+
         attachEventListeners() {
-            // Comment form submission
+            // Top-level comment form submission
             const form = this.container.querySelector('#ck-comment-form');
             if (form) {
                 form.addEventListener('submit', (e) => {
@@ -826,34 +990,92 @@
                     const formData = new FormData(form);
                     const commentData = {
                         content: formData.get('content'),
-                        parent_id: this.state.replyTo,
+                        parent_id: null, // Top-level comments have no parent
                     };
                     // Include guest fields only if not authenticated
                     if (!this.state.user) {
                         commentData.author_name = formData.get('name');
                         commentData.author_email = formData.get('email');
                     }
+                    // Set scroll anchor to first visible comment
+                    this.scrollAnchor = this.findFirstVisibleComment();
                     this.postComment(commentData);
                     form.reset();
-                    this.state.replyTo = null;
-                });
-            }
-
-            // Cancel reply
-            const cancelBtn = this.container.querySelector('#ck-cancel-reply');
-            if (cancelBtn) {
-                cancelBtn.addEventListener('click', () => {
-                    this.state.replyTo = null;
-                    this.render();
                 });
             }
 
             // Reply buttons
             this.container.querySelectorAll('.ck-reply-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    this.state.replyTo = parseInt(btn.dataset.id);
-                    this.render();
-                    this.container.querySelector('#ck-content')?.focus();
+                    const commentId = parseInt(btn.dataset.id);
+
+                    // Remove any existing reply forms
+                    const existingForms = this.container.querySelectorAll('.ck-inline-reply-form');
+                    existingForms.forEach(f => f.remove());
+
+                    this.state.replyTo = commentId;
+
+                    // Find the comment element and insert reply form after the comment-inner
+                    const commentDiv = this.container.querySelector(`.ck-comment[data-id="${commentId}"]`);
+                    if (commentDiv) {
+                        const commentInner = commentDiv.querySelector('.ck-comment-inner');
+                        const replyFormHTML = this.renderInlineReplyForm(commentId);
+
+                        // Create a temporary container to parse HTML
+                        const temp = document.createElement('div');
+                        temp.innerHTML = replyFormHTML;
+                        const replyFormElement = temp.firstElementChild;
+
+                        // Insert after comment-inner
+                        commentInner.insertAdjacentElement('afterend', replyFormElement);
+
+                        // Attach event listeners to the new form
+                        this.attachInlineReplyFormListeners(replyFormElement, commentId);
+
+                        // Focus textarea
+                        setTimeout(() => {
+                            replyFormElement.querySelector('.ck-reply-textarea')?.focus();
+                        }, 0);
+                    }
+                });
+            });
+
+            // Reply count toggle
+            this.container.querySelectorAll('.ck-reply-count').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const commentId = parseInt(btn.dataset.id);
+                    const commentDiv = this.container.querySelector(`.ck-comment[data-id="${commentId}"]`);
+
+                    if (this.state.expandedReplies.has(commentId)) {
+                        // Collapse
+                        this.state.expandedReplies.delete(commentId);
+                        const repliesDiv = commentDiv.querySelector('.ck-replies');
+                        if (repliesDiv) repliesDiv.remove();
+                        btn.style.display = 'inline-flex';
+                    } else {
+                        // Expand
+                        this.state.expandedReplies.add(commentId);
+                        const comment = this.commentMap.get(commentId);
+                        if (comment && comment.replies && comment.replies.length > 0) {
+                            const repliesHTML = `
+                                <div class="ck-replies">
+                                    ${comment.replies.map(r => this.renderComment(r, 1)).join('')}
+                                </div>
+                            `;
+                            const temp = document.createElement('div');
+                            temp.innerHTML = repliesHTML;
+                            const repliesElement = temp.firstElementChild;
+
+                            // Insert before the closing of comment div
+                            commentDiv.appendChild(repliesElement);
+
+                            // Attach event listeners to nested comments
+                            this.attachEventListeners();
+
+                            // Hide the reply count button
+                            btn.style.display = 'none';
+                        }
+                    }
                 });
             });
 
@@ -907,9 +1129,71 @@
             }
         }
 
+        attachInlineReplyFormListeners(formElement, parentId) {
+            const form = formElement.querySelector('.ck-reply-form');
+            const cancelBtn = formElement.querySelector('.ck-cancel-inline-reply');
+
+            // Form submission
+            if (form) {
+                form.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const formData = new FormData(form);
+                    const commentData = {
+                        content: formData.get('content'),
+                        parent_id: parentId,
+                    };
+                    // Include guest fields only if not authenticated
+                    if (!this.state.user) {
+                        commentData.author_name = formData.get('name');
+                        commentData.author_email = formData.get('email');
+                    }
+                    // Set scroll anchor to the parent comment being replied to
+                    this.scrollAnchor = parentId;
+                    this.postComment(commentData);
+                    this.state.replyTo = null;
+                    // Expand the parent comment to show the new reply
+                    this.state.expandedReplies.add(parentId);
+                    // Remove the reply form
+                    formElement.remove();
+                });
+            }
+
+            // Cancel button
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', () => {
+                    this.state.replyTo = null;
+                    formElement.remove();
+                });
+            }
+        }
+
+        findFirstVisibleComment() {
+            // Find the first comment that's currently visible in the viewport
+            const comments = this.container.querySelectorAll('.ck-comment[data-id]');
+            const viewportTop = window.pageYOffset;
+            const viewportBottom = viewportTop + window.innerHeight;
+
+            for (const comment of comments) {
+                const rect = comment.getBoundingClientRect();
+                const commentTop = rect.top + window.pageYOffset;
+                const commentBottom = commentTop + rect.height;
+
+                // Check if comment is at least partially visible in viewport
+                if (commentBottom > viewportTop && commentTop < viewportBottom) {
+                    return parseInt(comment.dataset.id);
+                }
+            }
+
+            // If no visible comment found, return null
+            return null;
+        }
+
         buildTree(comments) {
             const map = new Map();
             const roots = [];
+
+            // Helper to parse dates securely for sorting
+            const getDate = (d) => new Date(d.includes('Z') || d.includes('+') ? d : d.replace(' ', 'T') + 'Z');
 
             comments.forEach(c => map.set(c.id, { ...c, replies: [] }));
             comments.forEach(c => {
@@ -920,6 +1204,19 @@
                     roots.push(comment);
                 }
             });
+
+            // Sort roots: Newest first
+            roots.sort((a, b) => getDate(b.created_at) - getDate(a.created_at));
+
+            // Sort replies: Oldest first (chronological)
+            map.forEach(c => {
+                if (c.replies.length > 0) {
+                    c.replies.sort((a, b) => getDate(a.created_at) - getDate(b.created_at));
+                }
+            });
+
+            // Store in instance for quick access
+            this.commentMap = map;
 
             return roots;
         }
