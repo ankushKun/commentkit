@@ -21,7 +21,6 @@ comments.get('/comments', async (c) => {
     const domain = c.req.query('domain');
     const pageId = c.req.query('pageId');
     const pageTitle = c.req.query('title') || '';
-    const pageUrl = c.req.query('url') || '';
 
     if (!domain) {
         return c.json({ error: 'domain parameter is required' }, 400);
@@ -133,15 +132,29 @@ comments.post('/comments', zValidator('json', createCommentByDomainSchema), asyn
     // Validate: either authenticated or has author_name
     let userId: number | undefined;
     let authorName: string | undefined;
+    let authorEmail: string | undefined;
+
+    // For response construction
+    let effectiveAuthorName = '';
+    let effectiveAuthorEmail: string | undefined;
 
     if (authUser) {
         userId = authUser.id;
-        authorName = authUser.display_name ?? authUser.email;
+        // Don't store redundant info in comments table
+        authorName = undefined;
+        authorEmail = undefined;
+
+        effectiveAuthorName = authUser.display_name || authUser.email.split('@')[0];
+        effectiveAuthorEmail = authUser.email;
     } else {
         if (!body.author_name?.trim()) {
             return c.json({ error: 'author_name is required for anonymous comments' }, 400);
         }
         authorName = body.author_name;
+        authorEmail = body.author_email;
+
+        effectiveAuthorName = authorName;
+        effectiveAuthorEmail = authorEmail;
     }
 
     // Get client info
@@ -153,7 +166,7 @@ comments.post('/comments', zValidator('json', createCommentByDomainSchema), asyn
         pageId: page.id,
         userId,
         authorName,
-        authorEmail: body.author_email,
+        authorEmail,
         parentId: body.parent_id,
         content: body.content,
         ipAddress: ipAddress ?? undefined,
@@ -162,8 +175,8 @@ comments.post('/comments', zValidator('json', createCommentByDomainSchema), asyn
 
     const response: CommentResponse = {
         id: comment.id,
-        author_name: comment.author_name ?? '',
-        author_email_hash: comment.author_email ? await hashEmail(comment.author_email) : null,
+        author_name: effectiveAuthorName,
+        author_email_hash: effectiveAuthorEmail ? await hashEmail(effectiveAuthorEmail) : null,
         content: comment.content,
         parent_id: comment.parent_id,
         likes: 0,
@@ -293,15 +306,29 @@ comments.post('/:siteId/pages/:slug', zValidator('json', createCommentSchema), a
     // Validate: either authenticated or has author_name
     let userId: number | undefined;
     let authorName: string | undefined;
+    let authorEmail: string | undefined;
+
+    // For response construction
+    let effectiveAuthorName = '';
+    let effectiveAuthorEmail: string | undefined;
 
     if (authUser) {
         userId = authUser.id;
-        authorName = authUser.display_name ?? authUser.email;
+        // Don't store redundant info in comments table
+        authorName = undefined;
+        authorEmail = undefined;
+
+        effectiveAuthorName = authUser.display_name || authUser.email.split('@')[0];
+        effectiveAuthorEmail = authUser.email;
     } else {
         if (!body.author_name?.trim()) {
             return c.json({ error: 'author_name is required for anonymous comments' }, 400);
         }
         authorName = body.author_name;
+        authorEmail = body.author_email;
+
+        effectiveAuthorName = authorName;
+        effectiveAuthorEmail = authorEmail;
     }
 
     // Get client info
@@ -313,7 +340,7 @@ comments.post('/:siteId/pages/:slug', zValidator('json', createCommentSchema), a
         pageId: page.id,
         userId,
         authorName,
-        authorEmail: body.author_email,
+        authorEmail,
         parentId: body.parent_id,
         content: body.content,
         ipAddress: ipAddress ?? undefined,
@@ -322,8 +349,8 @@ comments.post('/:siteId/pages/:slug', zValidator('json', createCommentSchema), a
 
     const response: CommentResponse = {
         id: comment.id,
-        author_name: comment.author_name ?? '',
-        author_email_hash: comment.author_email ? await hashEmail(comment.author_email) : null,
+        author_name: effectiveAuthorName,
+        author_email_hash: effectiveAuthorEmail ? await hashEmail(effectiveAuthorEmail) : null,
         content: comment.content,
         parent_id: comment.parent_id,
         likes: 0,

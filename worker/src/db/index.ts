@@ -234,7 +234,16 @@ export class Database {
 
     async getCommentsByPage(pageId: number): Promise<Comment[]> {
         const result = await this.db
-            .prepare("SELECT * FROM comments WHERE page_id = ? AND status = 'approved' ORDER BY created_at ASC")
+            .prepare(`
+                SELECT 
+                    c.*,
+                    COALESCE(u.display_name, SUBSTR(u.email, 1, INSTR(u.email, '@') - 1), c.author_name) as author_name,
+                    COALESCE(u.email, c.author_email) as author_email
+                FROM comments c
+                LEFT JOIN users u ON c.user_id = u.id
+                WHERE c.page_id = ? AND c.status = 'approved' 
+                ORDER BY c.created_at ASC
+            `)
             .bind(pageId)
             .all<Comment>();
         return result.results;
@@ -305,15 +314,23 @@ export class Database {
     ): Promise<{ comments: Comment[]; total: number }> {
         const { status, limit = 50, offset = 0 } = options;
 
-        let countQuery = 'SELECT COUNT(*) as count FROM comments WHERE site_id = ?';
-        let dataQuery = 'SELECT * FROM comments WHERE site_id = ?';
+        let countQuery = 'SELECT COUNT(*) as count FROM comments c WHERE c.site_id = ?';
+        let dataQuery = `
+            SELECT 
+                c.*,
+                COALESCE(u.display_name, SUBSTR(u.email, 1, INSTR(u.email, '@') - 1), c.author_name) as author_name,
+                COALESCE(u.email, c.author_email) as author_email
+            FROM comments c
+            LEFT JOIN users u ON c.user_id = u.id
+            WHERE c.site_id = ?
+        `;
 
         if (status) {
-            countQuery += ' AND status = ?';
-            dataQuery += ' AND status = ?';
+            countQuery += ' AND c.status = ?';
+            dataQuery += ' AND c.status = ?';
         }
 
-        dataQuery += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+        dataQuery += ' ORDER BY c.created_at DESC LIMIT ? OFFSET ?';
 
         const countResult = status
             ? await this.db.prepare(countQuery).bind(siteId, status).first<{ count: number }>()
@@ -527,7 +544,15 @@ export class Database {
         const [users, sites, comments] = await Promise.all([
             this.db.prepare('SELECT * FROM users ORDER BY created_at DESC LIMIT ?').bind(limit).all<User>(),
             this.db.prepare('SELECT * FROM sites ORDER BY created_at DESC LIMIT ?').bind(limit).all<Site>(),
-            this.db.prepare('SELECT * FROM comments ORDER BY created_at DESC LIMIT ?').bind(limit).all<Comment>(),
+            this.db.prepare(`
+                SELECT 
+                    c.*,
+                    COALESCE(u.display_name, SUBSTR(u.email, 1, INSTR(u.email, '@') - 1), c.author_name) as author_name,
+                    COALESCE(u.email, c.author_email) as author_email
+                FROM comments c
+                LEFT JOIN users u ON c.user_id = u.id
+                ORDER BY c.created_at DESC LIMIT ?
+            `).bind(limit).all<Comment>(),
         ]);
 
         return {
@@ -695,10 +720,16 @@ export class Database {
 
         const countQuery = `SELECT COUNT(*) as count FROM comments c${whereClause}`;
         const dataQuery = `
-            SELECT c.*, p.slug as page_slug, s.domain as site_domain
+            SELECT 
+                c.*, 
+                p.slug as page_slug, 
+                s.domain as site_domain,
+                COALESCE(u.display_name, SUBSTR(u.email, 1, INSTR(u.email, '@') - 1), c.author_name) as author_name,
+                COALESCE(u.email, c.author_email) as author_email
             FROM comments c
             LEFT JOIN pages p ON c.page_id = p.id
             LEFT JOIN sites s ON c.site_id = s.id
+            LEFT JOIN users u ON c.user_id = u.id
             ${whereClause}
             ORDER BY c.created_at DESC LIMIT ? OFFSET ?
         `;
