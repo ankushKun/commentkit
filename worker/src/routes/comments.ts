@@ -7,15 +7,6 @@ import type { CommentResponse, Env, PageResponse } from '../types';
 
 const comments = new Hono<{ Bindings: Env }>();
 
-// Hash email for gravatar
-async function hashEmail(email: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(email.toLowerCase().trim());
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
 // GET /api/v1/sites/comments - Get page comments by domain and pageId
 comments.get('/comments', async (c) => {
     const domain = c.req.query('domain');
@@ -66,27 +57,27 @@ comments.get('/comments', async (c) => {
     const commentIds = pageComments.map((comment) => comment.id);
     const likeStats = await db.getCommentLikeStatsBatch(commentIds, userId);
 
-    // Get page like stats
-    const pageLikes = await db.getPageLikeStats(page.id, userId);
-    const commentCount = await db.getCommentCount(page.id);
+    // Combine page stats and count in parallel to save a query
+    const [pageLikes, commentCount] = await Promise.all([
+        db.getPageLikeStats(page.id, userId),
+        db.getCommentCount(page.id),
+    ]);
 
-    // Build response
-    const commentResponses: CommentResponse[] = await Promise.all(
-        pageComments.map(async (comment) => {
-            const stats = likeStats.get(comment.id) ?? { total_likes: 0, user_liked: false };
-            return {
-                id: comment.id,
-                author_name: comment.author_name ?? '',
-                author_email_hash: comment.author_email ? await hashEmail(comment.author_email) : null,
-                content: comment.content,
-                parent_id: comment.parent_id,
-                likes: stats.total_likes,
-                user_liked: stats.user_liked,
-                created_at: comment.created_at,
-                replies: [],
-            };
-        })
-    );
+    // Build response - no runtime hashing needed!
+    const commentResponses: CommentResponse[] = pageComments.map((comment) => {
+        const stats = likeStats.get(comment.id) ?? { total_likes: 0, user_liked: false };
+        return {
+            id: comment.id,
+            author_name: comment.author_name ?? '',
+            author_email_hash: comment.author_email_hash ?? null,
+            content: comment.content,
+            parent_id: comment.parent_id,
+            likes: stats.total_likes,
+            user_liked: stats.user_liked,
+            created_at: comment.created_at,
+            replies: [],
+        };
+    });
 
     const response: PageResponse = {
         page_id: page.id,
@@ -133,10 +124,7 @@ comments.post('/comments', zValidator('json', createCommentByDomainSchema), asyn
     let userId: number | undefined;
     let authorName: string | undefined;
     let authorEmail: string | undefined;
-
-    // For response construction
     let effectiveAuthorName = '';
-    let effectiveAuthorEmail: string | undefined;
 
     if (authUser) {
         userId = authUser.id;
@@ -145,7 +133,6 @@ comments.post('/comments', zValidator('json', createCommentByDomainSchema), asyn
         authorEmail = undefined;
 
         effectiveAuthorName = authUser.display_name || authUser.email.split('@')[0];
-        effectiveAuthorEmail = authUser.email;
     } else {
         if (!body.author_name?.trim()) {
             return c.json({ error: 'author_name is required for anonymous comments' }, 400);
@@ -154,7 +141,6 @@ comments.post('/comments', zValidator('json', createCommentByDomainSchema), asyn
         authorEmail = body.author_email;
 
         effectiveAuthorName = authorName;
-        effectiveAuthorEmail = authorEmail;
     }
 
     // Get client info
@@ -176,7 +162,7 @@ comments.post('/comments', zValidator('json', createCommentByDomainSchema), asyn
     const response: CommentResponse = {
         id: comment.id,
         author_name: effectiveAuthorName,
-        author_email_hash: effectiveAuthorEmail ? await hashEmail(effectiveAuthorEmail) : null,
+        author_email_hash: comment.author_email_hash ?? null,
         content: comment.content,
         parent_id: comment.parent_id,
         likes: 0,
@@ -235,27 +221,27 @@ comments.get('/:siteId/pages/:slug', async (c) => {
     const commentIds = pageComments.map((comment) => comment.id);
     const likeStats = await db.getCommentLikeStatsBatch(commentIds, userId);
 
-    // Get page like stats
-    const pageLikes = await db.getPageLikeStats(page.id, userId);
-    const commentCount = await db.getCommentCount(page.id);
+    // Combine page stats and count in parallel
+    const [pageLikes, commentCount] = await Promise.all([
+        db.getPageLikeStats(page.id, userId),
+        db.getCommentCount(page.id),
+    ]);
 
-    // Build response
-    const commentResponses: CommentResponse[] = await Promise.all(
-        pageComments.map(async (comment) => {
-            const stats = likeStats.get(comment.id) ?? { total_likes: 0, user_liked: false };
-            return {
-                id: comment.id,
-                author_name: comment.author_name ?? '',
-                author_email_hash: comment.author_email ? await hashEmail(comment.author_email) : null,
-                content: comment.content,
-                parent_id: comment.parent_id,
-                likes: stats.total_likes,
-                user_liked: stats.user_liked,
-                created_at: comment.created_at,
-                replies: [],
-            };
-        })
-    );
+    // Build response - no runtime hashing needed!
+    const commentResponses: CommentResponse[] = pageComments.map((comment) => {
+        const stats = likeStats.get(comment.id) ?? { total_likes: 0, user_liked: false };
+        return {
+            id: comment.id,
+            author_name: comment.author_name ?? '',
+            author_email_hash: comment.author_email_hash ?? null,
+            content: comment.content,
+            parent_id: comment.parent_id,
+            likes: stats.total_likes,
+            user_liked: stats.user_liked,
+            created_at: comment.created_at,
+            replies: [],
+        };
+    });
 
     const response: PageResponse = {
         page_id: page.id,
@@ -307,10 +293,7 @@ comments.post('/:siteId/pages/:slug', zValidator('json', createCommentSchema), a
     let userId: number | undefined;
     let authorName: string | undefined;
     let authorEmail: string | undefined;
-
-    // For response construction
     let effectiveAuthorName = '';
-    let effectiveAuthorEmail: string | undefined;
 
     if (authUser) {
         userId = authUser.id;
@@ -319,7 +302,6 @@ comments.post('/:siteId/pages/:slug', zValidator('json', createCommentSchema), a
         authorEmail = undefined;
 
         effectiveAuthorName = authUser.display_name || authUser.email.split('@')[0];
-        effectiveAuthorEmail = authUser.email;
     } else {
         if (!body.author_name?.trim()) {
             return c.json({ error: 'author_name is required for anonymous comments' }, 400);
@@ -328,7 +310,6 @@ comments.post('/:siteId/pages/:slug', zValidator('json', createCommentSchema), a
         authorEmail = body.author_email;
 
         effectiveAuthorName = authorName;
-        effectiveAuthorEmail = authorEmail;
     }
 
     // Get client info
@@ -350,7 +331,7 @@ comments.post('/:siteId/pages/:slug', zValidator('json', createCommentSchema), a
     const response: CommentResponse = {
         id: comment.id,
         author_name: effectiveAuthorName,
-        author_email_hash: effectiveAuthorEmail ? await hashEmail(effectiveAuthorEmail) : null,
+        author_email_hash: comment.author_email_hash ?? null,
         content: comment.content,
         parent_id: comment.parent_id,
         likes: 0,
@@ -466,7 +447,7 @@ comments.patch('/comments/:id', zValidator('json', editCommentSchema), async (c)
     const response: CommentResponse = {
         id: updated.id,
         author_name: updated.author_name ?? '',
-        author_email_hash: updated.author_email ? await hashEmail(updated.author_email) : null,
+        author_email_hash: updated.author_email_hash ?? null,
         content: updated.content,
         parent_id: updated.parent_id,
         likes: 0, // Would need to fetch again

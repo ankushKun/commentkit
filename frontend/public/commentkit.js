@@ -492,6 +492,68 @@
                     color: #9ca3af;
                 }
 
+                /* Magic link sent state */
+                .ck-login-sent {
+                    background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+                    border: 1px solid #dbeafe;
+                    border-radius: var(--ck-radius);
+                    padding: 24px;
+                    text-align: center;
+                }
+
+                .ck-login-sent .ck-email-icon {
+                    width: 48px;
+                    height: 48px;
+                    background: white;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin: 0 auto 16px;
+                    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+                }
+
+                .ck-login-sent .ck-email-icon svg {
+                    color: var(--ck-primary);
+                }
+
+                .ck-login-sent p {
+                    margin: 0 0 8px 0;
+                    color: var(--ck-text);
+                    font-size: 0.95rem;
+                    line-height: 1.5;
+                }
+
+                .ck-login-sent p:last-of-type {
+                    margin-bottom: 0;
+                    color: var(--ck-text-muted);
+                    font-size: 0.875rem;
+                }
+
+                .ck-login-sent .ck-email-address {
+                    font-weight: 600;
+                    color: var(--ck-primary);
+                }
+
+                .ck-link-btn {
+                    background: transparent;
+                    border: none;
+                    color: var(--ck-text-muted);
+                    font-size: 0.85rem;
+                    cursor: pointer;
+                    padding: 8px 16px;
+                    margin-top: 16px;
+                    border-radius: var(--ck-radius);
+                    transition: all 0.2s;
+                    font-family: inherit;
+                    font-weight: 500;
+                }
+
+                .ck-link-btn:hover {
+                    background: rgba(0, 0, 0, 0.05);
+                    color: var(--ck-text);
+                }
+
                 /* Simple Flat Threading */
                 .ck-comment {
                     position: relative;
@@ -683,6 +745,32 @@
             }
         }
 
+        // Generate Gravatar avatar HTML with fallback to initials
+        renderAvatar(emailHash, name, cssClass = 'ck-avatar') {
+            const displayName = name || 'Anonymous';
+            const initials = displayName.charAt(0).toUpperCase();
+
+            if (emailHash) {
+                // Try Gravatar, fallback to initials on error
+                const gravatarUrl = `https://www.gravatar.com/avatar/${emailHash}?d=404&s=64`;
+                return `
+                    <div class="${cssClass}" style="position: relative;">
+                        <img src="${gravatarUrl}" 
+                             alt="${this.escapeHtml(displayName)}" 
+                             style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;"
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"
+                        />
+                        <div style="display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; align-items: center; justify-content: center; background: #eff6ff; color: var(--ck-primary); font-weight: 700; border-radius: 50%;">
+                            ${initials}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // No email hash, just show initials
+            return `<div class="${cssClass}">${initials}</div>`;
+        }
+
         render() {
             // Save scroll anchor if needed (element-based scroll preservation)
             let scrollAnchorData = null;
@@ -773,12 +861,11 @@
             // If user is authenticated, show simplified form
             if (user) {
                 const displayName = user.display_name || user.email.split('@')[0];
-                const initials = displayName.charAt(0).toUpperCase();
                 return `
                     <div class="ck-form">
                         <h3>Leave a Comment</h3>
                         <div class="ck-user-info">
-                            <div class="ck-avatar">${initials}</div>
+                            ${this.renderAvatar(user.email_hash, displayName)}
                             <div class="ck-user-details">
                                 <div class="ck-user-name">${this.escapeHtml(displayName)}</div>
                                 <div class="ck-user-email">${this.escapeHtml(user.email)}</div>
@@ -801,9 +888,15 @@
             if (loginSent) {
                 return `
                     <div class="ck-form">
-                        <h3>Check your email</h3>
                         <div class="ck-login-sent">
-                            <p>We sent a login link to <span class="email">${this.escapeHtml(loginEmail)}</span></p>
+                            <div class="ck-email-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                                    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
+                                </svg>
+                            </div>
+                            <p><strong>Check your email</strong></p>
+                            <p>We sent a login link to <span class="ck-email-address">${this.escapeHtml(loginEmail)}</span></p>
                             <p>Click the link in the email to sign in.</p>
                             <button type="button" class="ck-link-btn" id="ck-back-to-form">Use a different email</button>
                         </div>
@@ -879,7 +972,6 @@
         }
 
         renderComment(comment, depth = 0) {
-            const initials = comment.author_name ? comment.author_name.charAt(0).toUpperCase() : '?';
             const timeAgo = this.formatTimeAgo(comment.created_at);
             const isLiked = false; // TODO: Track user likes
             const hasReplies = comment.replies && comment.replies.length > 0;
@@ -889,7 +981,7 @@
             return `
                 <div class="ck-comment" data-id="${comment.id}">
                     <div class="ck-comment-inner">
-                        <div class="ck-avatar">${initials}</div>
+                        ${this.renderAvatar(comment.author_email_hash, comment.author_name)}
                         <div class="ck-comment-content">
                             <div class="ck-comment-header">
                                 <span class="ck-comment-author">${this.escapeHtml(comment.author_name)}</span>
@@ -909,7 +1001,7 @@
                             </div>
                             ${hasReplies && !isExpanded ? `
                                 <button class="ck-reply-count" data-id="${comment.id}" aria-label="Toggle replies">
-                                    <div class="ck-reply-avatar">${comment.replies[0].author_name.charAt(0).toUpperCase()}</div>
+                                    ${this.renderAvatar(comment.replies[0].author_email_hash, comment.replies[0].author_name, 'ck-reply-avatar')}
                                     <span>${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>
                                 </button>
                             ` : ''}
@@ -929,12 +1021,11 @@
 
             if (user) {
                 const displayName = user.display_name || user.email.split('@')[0];
-                const initials = displayName.charAt(0).toUpperCase();
                 return `
                     <div class="ck-inline-reply-form" style="margin-left: 56px; margin-top: 16px; margin-bottom: 16px;">
                         <div class="ck-form">
                             <div class="ck-user-info">
-                                <div class="ck-avatar">${initials}</div>
+                                ${this.renderAvatar(user.email_hash, displayName)}
                                 <div class="ck-user-details">
                                     <div class="ck-user-name">${this.escapeHtml(displayName)}</div>
                                 </div>
@@ -1107,6 +1198,7 @@
                     this.sendToIframe({
                         action: 'login',
                         email: formData.get('email'),
+                        redirectUrl: window.location.href,  // Redirect back to this page after auth
                     });
                 });
             }
@@ -1283,37 +1375,70 @@
         }
     }
 
-    // Auto-initialize
+    // Auto-initialize all containers
     function autoInit() {
-        if (!currentScript) return;
+        // Find all elements with data-commentkit attribute
+        const containers = document.querySelectorAll('[data-commentkit]');
 
-        const containerId = currentScript.getAttribute('data-container') || '#commentkit';
-        const pageId = currentScript.getAttribute('data-page-id');
-        const theme = currentScript.getAttribute('data-theme');
+        containers.forEach(container => {
+            // Skip if already initialized
+            if (container.dataset.ckInitialized) return;
 
-        let configOptions = {};
-        if (typeof window.commentkit_config === 'function') {
-            const config = { page: { identifier: null, title: null, url: null } };
-            window.commentkit_config.call(config);
-            configOptions = {
-                pageId: config.page.identifier,
-                pageTitle: config.page.title,
-                pageUrl: config.page.url,
-            };
-        }
+            // Get configuration from data attributes
+            const pageId = container.dataset.pageId || container.dataset.commentkit || window.location.href;
+            const pageTitle = container.dataset.pageTitle || document.title;
+            const pageUrl = container.dataset.pageUrl || window.location.href;
+            const theme = container.dataset.theme || 'auto';
 
-        if (pageId) configOptions.pageId = pageId;
-        if (theme) configOptions.theme = theme;
-
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => {
-                CommentKit.init({ container: containerId, ...configOptions });
+            // Initialize this container
+            CommentKit.init({
+                container: container,
+                pageId: pageId,
+                pageTitle: pageTitle,
+                pageUrl: pageUrl,
+                theme: theme,
             });
-        } else {
-            CommentKit.init({ container: containerId, ...configOptions });
-        }
+
+            // Mark as initialized
+            container.dataset.ckInitialized = 'true';
+        });
     }
 
+    // Support dynamic initialization
     window.CommentKit = CommentKit;
-    autoInit();
+
+    // Auto-init when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', autoInit);
+    } else {
+        autoInit();
+    }
+
+    // Watch for dynamically added containers
+    if (typeof MutationObserver !== 'undefined') {
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                mutation.addedNodes.forEach((node) => {
+                    if (node.nodeType === 1) { // Element node
+                        // Check if the added node itself has data-commentkit
+                        if (node.hasAttribute && node.hasAttribute('data-commentkit')) {
+                            autoInit();
+                        }
+                        // Check if any children have data-commentkit
+                        if (node.querySelectorAll) {
+                            const newContainers = node.querySelectorAll('[data-commentkit]');
+                            if (newContainers.length > 0) {
+                                autoInit();
+                            }
+                        }
+                    }
+                });
+            });
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    }
 })();

@@ -1,5 +1,14 @@
 import type { Comment, LikeStats, Page, Site, User } from '../types';
 
+// Hash email for Gravatar (SHA-256)
+async function hashEmail(email: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(email.toLowerCase().trim());
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 // Database wrapper for D1 operations
 export class Database {
     constructor(private db: D1Database) { }
@@ -191,6 +200,157 @@ export class Database {
         return result;
     }
 
+    async getPagesBySite(
+        siteId: number,
+        options: { limit?: number; offset?: number; search?: string; sortBy?: string; sortOrder?: string } = {}
+    ): Promise<{
+        pages: (Page & { comment_count: number; pending_count: number; latest_comment_at: string | null })[];
+        total: number;
+    }> {
+        const { limit = 50, offset = 0, search, sortBy = 'created_at', sortOrder = 'desc' } = options;
+
+        let whereClause = 'WHERE p.site_id = ?';
+        const params: (string | number)[] = [siteId];
+
+        if (search) {
+            whereClause += ' AND (p.title LIKE ? OR p.slug LIKE ? OR p.url LIKE ?)';
+            const searchPattern = `%${search}%`;
+            params.push(searchPattern, searchPattern, searchPattern);
+        }
+
+        // Validate sortBy to prevent SQL injection
+        const validSortColumns = ['created_at', 'comment_count', 'title', 'pending_count'];
+        const safeSortBy = validSortColumns.includes(sortBy) ? sortBy : 'created_at';
+        const safeSortOrder = sortOrder === 'asc' ? 'ASC' : 'DESC';
+
+        const countQuery = `SELECT COUNT(*) as count FROM pages p ${whereClause}`;
+        const dataQuery = `
+            SELECT
+                p.*,
+                COALESCE((SELECT COUNT(*) FROM comments c WHERE c.page_id = p.id), 0) as comment_count,
+                COALESCE((SELECT COUNT(*) FROM comments c WHERE c.page_id = p.id AND c.status = 'pending'), 0) as pending_count,
+                (SELECT MAX(c.created_at) FROM comments c WHERE c.page_id = p.id) as latest_comment_at
+            FROM pages p
+            ${whereClause}
+            ORDER BY ${safeSortBy === 'comment_count' || safeSortBy === 'pending_count' ? safeSortBy : 'p.' + safeSortBy} ${safeSortOrder}
+            LIMIT ? OFFSET ?
+        `;
+
+        const countResult = await this.db.prepare(countQuery).bind(...params).first<{ count: number }>();
+        const dataResult = await this.db.prepare(dataQuery).bind(...params, limit, offset).all<Page & { comment_count: number; pending_count: number; latest_comment_at: string | null }>();
+
+        return {
+            pages: dataResult.results,
+            total: countResult?.count ?? 0,
+        };
+    }
+
+    async getSiteActivity(siteId: number, limit: number = 20): Promise<{
+        id: number;
+        type: 'comment' | 'reply';
+        author_name: string | null;
+        content: string;
+        page_title: string | null;
+        page_slug: string;
+        status: string;
+        created_at: string;
+    }[]> {
+        const result = await this.db.prepare(`
+            SELECT
+                c.id,
+                CASE WHEN c.parent_id IS NULL THEN 'comment' ELSE 'reply' END as type,
+                COALESCE(u.display_name, SUBSTR(u.email, 1, INSTR(u.email, '@') - 1), c.author_name) as author_name,
+                c.content,
+                p.title as page_title,
+                p.slug as page_slug,
+                c.status,
+                c.created_at
+            FROM comments c
+            LEFT JOIN users u ON c.user_id = u.id
+            LEFT JOIN pages p ON c.page_id = p.id
+            WHERE c.site_id = ?
+            ORDER BY c.created_at DESC
+            LIMIT ?
+        `).bind(siteId, limit).all();
+
+        return result.results as {
+            id: number;
+            type: 'comment' | 'reply';
+            author_name: string | null;
+            content: string;
+            page_title: string | null;
+            page_slug: string;
+            status: string;
+            created_at: string;
+        }[];
+    }
+
+    async getSiteAnalytics(siteId: number, period: string = '30d'): Promise<{
+        summary: { total_comments: number; approved: number; pending: number; spam: number; rejected: number };
+        daily_comments: { date: string; count: number; approved: number; pending: number }[];
+        top_pages: { slug: string; title: string | null; comment_count: number }[];
+        top_commenters: { author_name: string; comment_count: number }[];
+    }> {
+        const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
+
+        // Summary stats for the period
+        const summary = await this.db.prepare(`
+            SELECT
+                COUNT(*) as total_comments,
+                SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+                SUM(CASE WHEN status = 'spam' THEN 1 ELSE 0 END) as spam,
+                SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected
+            FROM comments
+            WHERE site_id = ? AND created_at >= datetime('now', '-' || ? || ' days')
+        `).bind(siteId, days).first<{ total_comments: number; approved: number; pending: number; spam: number; rejected: number }>();
+
+        // Daily breakdown
+        const dailyComments = await this.db.prepare(`
+            SELECT
+                date(created_at) as date,
+                COUNT(*) as count,
+                SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
+            FROM comments
+            WHERE site_id = ? AND created_at >= datetime('now', '-' || ? || ' days')
+            GROUP BY date(created_at)
+            ORDER BY date ASC
+        `).bind(siteId, days).all<{ date: string; count: number; approved: number; pending: number }>();
+
+        // Top pages by comments
+        const topPages = await this.db.prepare(`
+            SELECT p.slug, p.title, COUNT(c.id) as comment_count
+            FROM pages p
+            LEFT JOIN comments c ON c.page_id = p.id AND c.created_at >= datetime('now', '-' || ? || ' days')
+            WHERE p.site_id = ?
+            GROUP BY p.id
+            HAVING comment_count > 0
+            ORDER BY comment_count DESC
+            LIMIT 10
+        `).bind(days, siteId).all<{ slug: string; title: string | null; comment_count: number }>();
+
+        // Top commenters
+        const topCommenters = await this.db.prepare(`
+            SELECT
+                COALESCE(u.display_name, SUBSTR(u.email, 1, INSTR(u.email, '@') - 1), c.author_name) as author_name,
+                COUNT(*) as comment_count
+            FROM comments c
+            LEFT JOIN users u ON c.user_id = u.id
+            WHERE c.site_id = ? AND c.created_at >= datetime('now', '-' || ? || ' days')
+            GROUP BY COALESCE(c.user_id, c.author_email, c.author_name)
+            ORDER BY comment_count DESC
+            LIMIT 10
+        `).bind(siteId, days).all<{ author_name: string; comment_count: number }>();
+
+        return {
+            summary: summary ?? { total_comments: 0, approved: 0, pending: 0, spam: 0, rejected: 0 },
+            daily_comments: dailyComments.results,
+            top_pages: topPages.results,
+            top_commenters: topCommenters.results,
+        };
+    }
+
     // ==========================================
     // User queries
     // ==========================================
@@ -204,9 +364,11 @@ export class Database {
     }
 
     async createUser(email: string, displayName?: string): Promise<User> {
+        // Pre-compute email hash for Gravatar
+        const emailHash = await hashEmail(email);
         const result = await this.db
-            .prepare('INSERT INTO users (email, display_name) VALUES (?, ?) RETURNING *')
-            .bind(email, displayName ?? null)
+            .prepare('INSERT INTO users (email, display_name, email_hash) VALUES (?, ?, ?) RETURNING *')
+            .bind(email, displayName ?? null, emailHash)
             .first<User>();
         if (!result) throw new Error('Failed to create user');
         return result;
@@ -238,7 +400,8 @@ export class Database {
                 SELECT 
                     c.*,
                     COALESCE(u.display_name, SUBSTR(u.email, 1, INSTR(u.email, '@') - 1), c.author_name) as author_name,
-                    COALESCE(u.email, c.author_email) as author_email
+                    COALESCE(u.email, c.author_email) as author_email,
+                    COALESCE(u.email_hash, c.author_email_hash) as author_email_hash
                 FROM comments c
                 LEFT JOIN users u ON c.user_id = u.id
                 WHERE c.page_id = ? AND c.status = 'approved' 
@@ -266,10 +429,16 @@ export class Database {
     }): Promise<Comment> {
         const status = params.userId ? 'approved' : 'pending';
 
+        // Pre-compute email hash for anonymous comments
+        let authorEmailHash: string | null = null;
+        if (params.authorEmail) {
+            authorEmailHash = await hashEmail(params.authorEmail);
+        }
+
         const result = await this.db
             .prepare(
-                `INSERT INTO comments (site_id, page_id, user_id, author_name, author_email, parent_id, content, status, ip_address, user_agent) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`
+                `INSERT INTO comments (site_id, page_id, user_id, author_name, author_email, author_email_hash, parent_id, content, status, ip_address, user_agent) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`
             )
             .bind(
                 params.siteId,
@@ -277,6 +446,7 @@ export class Database {
                 params.userId ?? null,
                 params.authorName ?? null,
                 params.authorEmail ?? null,
+                authorEmailHash,
                 params.parentId ?? null,
                 params.content,
                 status,
@@ -319,7 +489,8 @@ export class Database {
             SELECT 
                 c.*,
                 COALESCE(u.display_name, SUBSTR(u.email, 1, INSTR(u.email, '@') - 1), c.author_name) as author_name,
-                COALESCE(u.email, c.author_email) as author_email
+                COALESCE(u.email, c.author_email) as author_email,
+                COALESCE(u.email_hash, c.author_email_hash) as author_email_hash
             FROM comments c
             LEFT JOIN users u ON c.user_id = u.id
             WHERE c.site_id = ?
@@ -377,23 +548,22 @@ export class Database {
     }
 
     async getPageLikeStats(pageId: number, userId?: number): Promise<LikeStats> {
-        const countResult = await this.db
-            .prepare('SELECT COUNT(*) as count FROM page_likes WHERE page_id = ?')
-            .bind(pageId)
-            .first<{ count: number }>();
+        // Single query to get both count and user like status
+        const result = await this.db
+            .prepare(`
+                SELECT 
+                    COUNT(*) as count,
+                    ${userId ? 'MAX(CASE WHEN user_id = ? THEN 1 ELSE 0 END)' : '0'} as user_liked
+                FROM page_likes 
+                WHERE page_id = ?
+            `)
+            .bind(...(userId ? [userId, pageId] : [pageId]))
+            .first<{ count: number; user_liked: number }>();
 
-        const totalLikes = countResult?.count ?? 0;
-
-        let userLiked = false;
-        if (userId) {
-            const liked = await this.db
-                .prepare('SELECT 1 FROM page_likes WHERE page_id = ? AND user_id = ? LIMIT 1')
-                .bind(pageId, userId)
-                .first();
-            userLiked = !!liked;
-        }
-
-        return { total_likes: totalLikes, user_liked: userLiked };
+        return {
+            total_likes: result?.count ?? 0,
+            user_liked: !!result?.user_liked
+        };
     }
 
     // ==========================================
@@ -418,23 +588,22 @@ export class Database {
     }
 
     async getCommentLikeStats(commentId: number, userId?: number): Promise<LikeStats> {
-        const countResult = await this.db
-            .prepare("SELECT COUNT(*) as count FROM reactions WHERE comment_id = ? AND reaction = 'like'")
-            .bind(commentId)
-            .first<{ count: number }>();
+        // Single query to get both count and user like status
+        const result = await this.db
+            .prepare(`
+                SELECT 
+                    COUNT(*) as count,
+                    ${userId ? 'MAX(CASE WHEN user_id = ? THEN 1 ELSE 0 END)' : '0'} as user_liked
+                FROM reactions 
+                WHERE comment_id = ? AND reaction = 'like'
+            `)
+            .bind(...(userId ? [userId, commentId] : [commentId]))
+            .first<{ count: number; user_liked: number }>();
 
-        const totalLikes = countResult?.count ?? 0;
-
-        let userLiked = false;
-        if (userId) {
-            const liked = await this.db
-                .prepare("SELECT 1 FROM reactions WHERE comment_id = ? AND user_id = ? AND reaction = 'like' LIMIT 1")
-                .bind(commentId, userId)
-                .first();
-            userLiked = !!liked;
-        }
-
-        return { total_likes: totalLikes, user_liked: userLiked };
+        return {
+            total_likes: result?.count ?? 0,
+            user_liked: !!result?.user_liked
+        };
     }
 
     async getCommentLikeStatsBatch(commentIds: number[], userId?: number): Promise<Map<number, LikeStats>> {
@@ -447,10 +616,31 @@ export class Database {
 
         if (commentIds.length === 0) return result;
 
-        // Query each one (D1 doesn't support array parameters well)
-        for (const commentId of commentIds) {
-            const stats = await this.getCommentLikeStats(commentId, userId);
-            result.set(commentId, stats);
+        // Single optimized query using GROUP BY instead of N queries
+        const placeholders = commentIds.map(() => '?').join(',');
+        const query = `
+            SELECT 
+                comment_id,
+                COUNT(*) as total_likes,
+                ${userId ? 'MAX(CASE WHEN user_id = ? THEN 1 ELSE 0 END)' : '0'} as user_liked
+            FROM reactions
+            WHERE comment_id IN (${placeholders}) AND reaction = 'like'
+            GROUP BY comment_id
+        `;
+
+        const bindings = userId ? [userId, ...commentIds] : commentIds;
+        const rows = await this.db.prepare(query).bind(...bindings).all<{
+            comment_id: number;
+            total_likes: number;
+            user_liked: number;
+        }>();
+
+        // Update the map with actual values
+        for (const row of rows.results) {
+            result.set(row.comment_id, {
+                total_likes: row.total_likes,
+                user_liked: !!row.user_liked,
+            });
         }
 
         return result;

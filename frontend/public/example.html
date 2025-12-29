@@ -39,6 +39,7 @@
             margin-bottom: 20px;
         }
     </style>
+    <script src="/commentkit.js" data-api-url="http://localhost:8787"></script>
 </head>
 
 <body>
@@ -67,7 +68,7 @@
     <div class="comments-section">
 
         <!-- CommentKit Widget -->
-        <div id="commentkit"></div>
+        <div data-commentkit></div>
 
         <!--
             BASIC USAGE: Just include the script - no configuration needed!
@@ -78,7 +79,6 @@
             For development, specify data-api-url to point to the backend server.
             In production (when frontend and API are on same origin), this isn't needed.
         -->
-        <script src="/commentkit.js" data-api-url="http://localhost:8787"></script>
 
         <!--
             ALTERNATIVE: Use a custom page identifier

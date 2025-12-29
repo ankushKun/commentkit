@@ -37,6 +37,7 @@ likes.post('/pages/:pageId/likes', async (c) => {
 
     const db = new Database(c.env.DB);
     await db.addPageLike(pageId, authUser.id);
+    // Get fresh stats (user_liked will be true, but count may have changed)
     const stats = await db.getPageLikeStats(pageId, authUser.id);
 
     return c.json(stats);
@@ -56,6 +57,7 @@ likes.delete('/pages/:pageId/likes', async (c) => {
 
     const db = new Database(c.env.DB);
     await db.removePageLike(pageId, authUser.id);
+    // Get fresh stats (user_liked will be false, but count may have changed)
     const stats = await db.getPageLikeStats(pageId, authUser.id);
 
     return c.json(stats);
@@ -93,6 +95,7 @@ likes.post('/comments/:commentId/likes', async (c) => {
 
     const db = new Database(c.env.DB);
     await db.addCommentLike(commentId, authUser.id);
+    // Get fresh stats
     const stats = await db.getCommentLikeStats(commentId, authUser.id);
 
     return c.json(stats);
@@ -112,6 +115,7 @@ likes.delete('/comments/:commentId/likes', async (c) => {
 
     const db = new Database(c.env.DB);
     await db.removeCommentLike(commentId, authUser.id);
+    // Get fresh stats
     const stats = await db.getCommentLikeStats(commentId, authUser.id);
 
     return c.json(stats);

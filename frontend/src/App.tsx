@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { AuthProvider, useAuth } from '@/lib/auth-context';
+import { SiteProvider } from '@/lib/site-context';
 import { LoginForm } from '@/components/login-form';
 import { DashboardLayout, type TabType } from '@/components/dashboard-layout';
 import { OverviewTab } from '@/components/overview-tab';
 import { SitesTab } from '@/components/sites-tab';
 import { SettingsTab } from '@/components/settings-tab';
-import { AdminTab } from '@/components/admin-tab';
 import './index.css';
 
 function Dashboard() {
@@ -14,27 +14,28 @@ function Dashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-slate-600">Loading...</div>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen py-12 px-4">
+      <div className="min-h-screen py-12 px-4 bg-slate-50">
         <LoginForm />
       </div>
     );
   }
 
   return (
-    <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab}>
-      {activeTab === 'overview' && <OverviewTab />}
-      {activeTab === 'sites' && <SitesTab />}
-      {activeTab === 'settings' && <SettingsTab />}
-      {activeTab === 'admin' && user?.is_superadmin && <AdminTab />}
-    </DashboardLayout>
+    <SiteProvider>
+      <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab}>
+        {activeTab === 'overview' && <OverviewTab />}
+        {activeTab === 'sites' && <SitesTab />}
+        {activeTab === 'settings' && <SettingsTab />}
+      </DashboardLayout>
+    </SiteProvider>
   );
 }
 

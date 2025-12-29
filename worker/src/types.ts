@@ -24,6 +24,7 @@ export interface User {
     id: number;
     email: string;
     email_verified: number;
+    email_hash: string | null;
     display_name: string | null;
     avatar_url: string | null;
     is_superadmin: number;
@@ -38,6 +39,7 @@ export interface Comment {
     user_id: number | null;
     author_name: string | null;
     author_email: string | null;
+    author_email_hash: string | null;
     parent_id: number | null;
     content: string;
     status: 'pending' | 'approved' | 'rejected' | 'spam';
@@ -123,6 +125,38 @@ export interface Env {
 export interface AuthUser {
     id: number;
     email: string;
+    email_hash: string | null;
     display_name: string | null;
     is_superadmin: boolean;
+}
+
+// Dashboard types
+export interface PageWithStats extends Page {
+    comment_count: number;
+    pending_count: number;
+    latest_comment_at: string | null;
+}
+
+export interface ActivityItem {
+    id: number;
+    type: 'comment' | 'reply';
+    author_name: string | null;
+    content: string;
+    page_title: string | null;
+    page_slug: string;
+    status: string;
+    created_at: string;
+}
+
+export interface AnalyticsData {
+    summary: {
+        total_comments: number;
+        approved: number;
+        pending: number;
+        spam: number;
+        rejected: number;
+    };
+    daily_comments: { date: string; count: number; approved: number; pending: number }[];
+    top_pages: { slug: string; title: string | null; comment_count: number }[];
+    top_commenters: { author_name: string; comment_count: number }[];
 }

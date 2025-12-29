@@ -34,6 +34,7 @@ export async function getAuthUser(c: Context<{ Bindings: Env }>): Promise<AuthUs
     return {
         id: user.id,
         email: user.email,
+        email_hash: user.email_hash,
         display_name: user.display_name,
         is_superadmin: user.is_superadmin === 1,
     };

@@ -1,5 +1,6 @@
 -- CommentKit Schema for D1 (SQLite)
 -- Multi-site commenting and discussion backend
+-- Includes all optimizations for 10ms CPU limit
 
 -- ============================================
 -- SITES: Multi-site support
@@ -41,6 +42,7 @@ CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   email TEXT NOT NULL UNIQUE,
   email_verified INTEGER NOT NULL DEFAULT 0,
+  email_hash TEXT,
   display_name TEXT,
   avatar_url TEXT,
   is_superadmin INTEGER NOT NULL DEFAULT 0,
@@ -50,6 +52,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_is_superadmin ON users(is_superadmin);
+CREATE INDEX IF NOT EXISTS idx_users_email_hash ON users(email_hash);
 
 -- ============================================
 -- MAGIC_LINKS: Passwordless authentication
@@ -65,6 +68,7 @@ CREATE TABLE IF NOT EXISTS magic_links (
 
 CREATE INDEX IF NOT EXISTS idx_magic_links_token ON magic_links(token);
 CREATE INDEX IF NOT EXISTS idx_magic_links_email ON magic_links(email);
+CREATE INDEX IF NOT EXISTS idx_magic_links_token_used ON magic_links(token, used, expires_at);
 
 -- ============================================
 -- SESSIONS: User sessions
@@ -79,6 +83,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_token_expires ON sessions(token_hash, expires_at);
 
 -- ============================================
 -- COMMENTS: Threaded comments with moderation
@@ -90,6 +95,7 @@ CREATE TABLE IF NOT EXISTS comments (
   user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
   author_name TEXT,
   author_email TEXT,
+  author_email_hash TEXT,
   parent_id INTEGER REFERENCES comments(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'spam')),
@@ -107,6 +113,9 @@ CREATE INDEX IF NOT EXISTS idx_comments_site_id ON comments(site_id);
 CREATE INDEX IF NOT EXISTS idx_comments_parent_id ON comments(parent_id);
 CREATE INDEX IF NOT EXISTS idx_comments_status ON comments(status);
 CREATE INDEX IF NOT EXISTS idx_comments_created_at ON comments(created_at);
+CREATE INDEX IF NOT EXISTS idx_comments_user_id ON comments(user_id);
+CREATE INDEX IF NOT EXISTS idx_comments_site_status ON comments(site_id, status);
+CREATE INDEX IF NOT EXISTS idx_comments_page_status ON comments(page_id, status);
 
 -- ============================================
 -- REACTIONS: Likes and other reactions on comments
@@ -121,6 +130,7 @@ CREATE TABLE IF NOT EXISTS reactions (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reactions_unique ON reactions(comment_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_reactions_comment_id ON reactions(comment_id);
+CREATE INDEX IF NOT EXISTS idx_reactions_comment_user ON reactions(comment_id, user_id);
 
 -- ============================================
 -- PAGE_LIKES: Likes on pages (authenticated users only)
@@ -134,6 +144,7 @@ CREATE TABLE IF NOT EXISTS page_likes (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_page_likes_unique ON page_likes(page_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_page_likes_page_id ON page_likes(page_id);
+CREATE INDEX IF NOT EXISTS idx_page_likes_user_id ON page_likes(user_id);
 
 -- ============================================
 -- MODERATION_LOG: Track moderation actions

@@ -48,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Check for token in URL (from magic link)
         const params = new URLSearchParams(window.location.search);
         const token = params.get('token');
+        const redirectUrl = params.get('redirect');
 
         if (token) {
             // Verify and store token
@@ -55,7 +56,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (data && !error) {
                     localStorage.setItem('auth_token', data.token);
                     setUser(data.user);
-                    // Clean URL
+
+                    // Redirect to the original page if specified
+                    if (redirectUrl) {
+                        window.location.href = redirectUrl;
+                        return;
+                    }
+
+                    // Clean URL if not redirecting
                     window.history.replaceState({}, '', window.location.pathname);
                 }
                 setLoading(false);

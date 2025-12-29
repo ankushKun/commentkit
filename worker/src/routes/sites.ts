@@ -296,4 +296,140 @@ sites.get('/:id/stats', async (c) => {
     return c.json(stats);
 });
 
+// GET /api/v1/sites/:id/pages - List pages with comment counts
+sites.get('/:id/pages', async (c) => {
+    const user = await getAuthUser(c);
+    if (!user) {
+        return c.json({ error: 'Authentication required' }, 401);
+    }
+
+    const siteId = parseInt(c.req.param('id'));
+    if (isNaN(siteId)) {
+        return c.json({ error: 'Invalid site_id' }, 400);
+    }
+
+    // Parse query params
+    const limit = parseInt(c.req.query('limit') || '50');
+    const offset = parseInt(c.req.query('offset') || '0');
+    const search = c.req.query('search');
+    const sortBy = c.req.query('sort') || 'created_at';
+    const sortOrder = c.req.query('order') || 'desc';
+
+    const db = new Database(c.env.DB);
+    const site = await db.getSiteById(siteId);
+
+    if (!site) {
+        return c.json({ error: 'Site not found' }, 404);
+    }
+
+    if (site.owner_id !== user.id) {
+        return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    const result = await db.getPagesBySite(siteId, { limit, offset, search, sortBy, sortOrder });
+
+    return c.json({
+        pages: result.pages,
+        total: result.total,
+        limit,
+        offset,
+    });
+});
+
+// GET /api/v1/sites/:id/activity - Get recent activity for a site
+sites.get('/:id/activity', async (c) => {
+    const user = await getAuthUser(c);
+    if (!user) {
+        return c.json({ error: 'Authentication required' }, 401);
+    }
+
+    const siteId = parseInt(c.req.param('id'));
+    if (isNaN(siteId)) {
+        return c.json({ error: 'Invalid site_id' }, 400);
+    }
+
+    const limit = parseInt(c.req.query('limit') || '20');
+
+    const db = new Database(c.env.DB);
+    const site = await db.getSiteById(siteId);
+
+    if (!site) {
+        return c.json({ error: 'Site not found' }, 404);
+    }
+
+    if (site.owner_id !== user.id) {
+        return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    const activity = await db.getSiteActivity(siteId, limit);
+
+    return c.json({ activity });
+});
+
+// GET /api/v1/sites/:id/analytics - Get site analytics with time series data
+sites.get('/:id/analytics', async (c) => {
+    const user = await getAuthUser(c);
+    if (!user) {
+        return c.json({ error: 'Authentication required' }, 401);
+    }
+
+    const siteId = parseInt(c.req.param('id'));
+    if (isNaN(siteId)) {
+        return c.json({ error: 'Invalid site_id' }, 400);
+    }
+
+    const period = c.req.query('period') || '30d';
+
+    const db = new Database(c.env.DB);
+    const site = await db.getSiteById(siteId);
+
+    if (!site) {
+        return c.json({ error: 'Site not found' }, 404);
+    }
+
+    if (site.owner_id !== user.id) {
+        return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    const analytics = await db.getSiteAnalytics(siteId, period);
+
+    return c.json(analytics);
+});
+
+// POST /api/v1/sites/:id/comments/bulk - Bulk moderate comments
+const bulkModerateSchema = z.object({
+    comment_ids: z.array(z.number()).min(1).max(100),
+    action: z.enum(['approve', 'reject', 'spam', 'delete']),
+});
+
+sites.post('/:id/comments/bulk', zValidator('json', bulkModerateSchema), async (c) => {
+    const user = await getAuthUser(c);
+    if (!user) {
+        return c.json({ error: 'Authentication required' }, 401);
+    }
+
+    const siteId = parseInt(c.req.param('id'));
+    if (isNaN(siteId)) {
+        return c.json({ error: 'Invalid site_id' }, 400);
+    }
+
+    const body = c.req.valid('json');
+    const db = new Database(c.env.DB);
+
+    const site = await db.getSiteById(siteId);
+    if (!site || site.owner_id !== user.id) {
+        return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    let processed = 0;
+    if (body.action === 'delete') {
+        processed = await db.bulkDeleteComments(body.comment_ids);
+    } else {
+        const statusMap: Record<string, string> = { approve: 'approved', reject: 'rejected', spam: 'spam' };
+        processed = await db.bulkUpdateCommentStatus(body.comment_ids, statusMap[body.action]);
+    }
+
+    return c.json({ processed, action: body.action });
+});
+
 export { sites };

@@ -120,6 +120,48 @@ export const sites = {
         request<{ api_key: string }>(`/api/v1/admin/sites/${id}/regenerate-key`, {
             method: 'POST',
         }),
+
+    // Get pages for a site with comment counts
+    getPages: (siteId: number, params?: {
+        limit?: number;
+        offset?: number;
+        search?: string;
+        sort?: string;
+        order?: string;
+    }) => {
+        const query = new URLSearchParams();
+        if (params?.limit) query.set('limit', String(params.limit));
+        if (params?.offset) query.set('offset', String(params.offset));
+        if (params?.search) query.set('search', params.search);
+        if (params?.sort) query.set('sort', params.sort);
+        if (params?.order) query.set('order', params.order);
+        const queryStr = query.toString();
+        return request<{ pages: PageWithStats[]; total: number; limit: number; offset: number }>(
+            `/api/v1/admin/sites/${siteId}/pages${queryStr ? `?${queryStr}` : ''}`
+        );
+    },
+
+    // Get activity for a site
+    getActivity: (siteId: number, limit?: number) =>
+        request<{ activity: ActivityItem[] }>(
+            `/api/v1/admin/sites/${siteId}/activity${limit ? `?limit=${limit}` : ''}`
+        ),
+
+    // Get analytics for a site
+    getAnalytics: (siteId: number, period?: string) =>
+        request<AnalyticsData>(
+            `/api/v1/admin/sites/${siteId}/analytics${period ? `?period=${period}` : ''}`
+        ),
+
+    // Bulk moderate comments
+    bulkModerate: (siteId: number, commentIds: number[], action: 'approve' | 'reject' | 'spam' | 'delete') =>
+        request<{ processed: number; action: string }>(
+            `/api/v1/admin/sites/${siteId}/comments/bulk`,
+            {
+                method: 'POST',
+                body: JSON.stringify({ comment_ids: commentIds, action }),
+            }
+        ),
 };
 
 // Comments management
@@ -215,6 +257,7 @@ export const superadmin = {
 export interface User {
     id: number;
     email: string;
+    email_hash: string | null;
     display_name: string | null;
     is_superadmin: boolean;
 }
@@ -322,8 +365,47 @@ export interface Comment {
     user_id: number | null;
     author_name: string | null;
     author_email: string | null;
+    author_email_hash: string | null;
     content: string;
     status: 'pending' | 'approved' | 'rejected' | 'spam';
     created_at: string;
     updated_at: string;
+}
+
+// Dashboard types
+export interface PageWithStats {
+    id: number;
+    site_id: number;
+    slug: string;
+    title: string | null;
+    url: string | null;
+    comment_count: number;
+    pending_count: number;
+    latest_comment_at: string | null;
+    created_at: string;
+}
+
+export interface ActivityItem {
+    id: number;
+    type: 'comment' | 'reply';
+    author_name: string | null;
+    author_email_hash: string | null;
+    content: string;
+    page_title: string | null;
+    page_slug: string;
+    status: string;
+    created_at: string;
+}
+
+export interface AnalyticsData {
+    summary: {
+        total_comments: number;
+        approved: number;
+        pending: number;
+        spam: number;
+        rejected: number;
+    };
+    daily_comments: { date: string; count: number; approved: number; pending: number }[];
+    top_pages: { slug: string; title: string | null; comment_count: number }[];
+    top_commenters: { author_name: string; comment_count: number }[];
 }

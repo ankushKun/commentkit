@@ -34,10 +34,11 @@ function formatDate(date: Date): string {
 // POST /api/v1/auth/login - Send magic link
 const loginSchema = z.object({
     email: z.string().email(),
+    redirect_url: z.string().url().nullable().optional(),
 });
 
 auth.post('/login', zValidator('json', loginSchema), async (c) => {
-    const { email } = c.req.valid('json');
+    const { email, redirect_url } = c.req.valid('json');
 
     const db = new Database(c.env.DB);
 
@@ -50,7 +51,12 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
 
     // Build verify URL - use frontend URL if available, otherwise API URL
     const frontendUrl = c.env.FRONTEND_URL;
-    const verifyUrl = `${frontendUrl}?token=${token}`;
+    let verifyUrl = `${frontendUrl}?token=${token}`;
+
+    // Include redirect URL if provided
+    if (redirect_url) {
+        verifyUrl += `&redirect=${encodeURIComponent(redirect_url)}`;
+    }
 
     // Log for development
     console.log(`🔗 Magic link for ${email}: ${verifyUrl}`);
@@ -93,6 +99,7 @@ auth.get('/verify', async (c) => {
         user: {
             id: user.id,
             email: user.email,
+            email_hash: user.email_hash,
             display_name: user.display_name,
             is_superadmin: user.is_superadmin === 1,
         },
@@ -111,6 +118,7 @@ auth.get('/me', async (c) => {
     const userData = {
         id: user.id,
         email: user.email,
+        email_hash: user.email_hash,
         display_name: user.display_name,
         is_superadmin: user.is_superadmin,
     };
