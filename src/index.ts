@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from './middleware';
-import { auth, comments, likes, sites } from './routes';
+import { auth, comments, likes, sites, superadmin } from './routes';
 import type { Env } from './types';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -21,8 +21,8 @@ app.get('/health', (c) => {
 app.route('/api/v1/auth', auth);
 app.route('/api/v1/sites', comments);
 app.route('/api/v1/admin/sites', sites);
+app.route('/api/v1/superadmin', superadmin);
 app.route('/api/v1', likes);
-
 
 // 404 handler
 app.notFound((c) => {

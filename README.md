@@ -110,6 +110,38 @@ bun run deploy
 | POST   | `/api/v1/comments/:id/likes` | Like comment      | Yes  |
 | DELETE | `/api/v1/comments/:id/likes` | Unlike comment    | Yes  |
 
+### Superadmin - Analytics
+| Method | Endpoint                      | Description               | Auth       |
+| ------ | ----------------------------- | ------------------------- | ---------- |
+| GET    | `/api/v1/superadmin/stats`    | Get global platform stats | Superadmin |
+| GET    | `/api/v1/superadmin/activity` | Get recent activity       | Superadmin |
+
+### Superadmin - User Management
+| Method | Endpoint                             | Description           | Auth       |
+| ------ | ------------------------------------ | --------------------- | ---------- |
+| GET    | `/api/v1/superadmin/users`           | List all users        | Superadmin |
+| GET    | `/api/v1/superadmin/users/:id`       | Get user details      | Superadmin |
+| PATCH  | `/api/v1/superadmin/users/:id/admin` | Set user admin status | Superadmin |
+| DELETE | `/api/v1/superadmin/users/:id`       | Delete user           | Superadmin |
+
+### Superadmin - Site Management
+| Method | Endpoint                             | Description             | Auth       |
+| ------ | ------------------------------------ | ----------------------- | ---------- |
+| GET    | `/api/v1/superadmin/sites`           | List all sites          | Superadmin |
+| GET    | `/api/v1/superadmin/sites/:id`       | Get site details        | Superadmin |
+| PATCH  | `/api/v1/superadmin/sites/:id/owner` | Transfer site ownership | Superadmin |
+| DELETE | `/api/v1/superadmin/sites/:id`       | Delete site             | Superadmin |
+
+### Superadmin - Comment Management
+| Method | Endpoint                                  | Description         | Auth       |
+| ------ | ----------------------------------------- | ------------------- | ---------- |
+| GET    | `/api/v1/superadmin/comments`             | List all comments   | Superadmin |
+| GET    | `/api/v1/superadmin/comments/:id`         | Get comment details | Superadmin |
+| PATCH  | `/api/v1/superadmin/comments/:id/status`  | Moderate comment    | Superadmin |
+| POST   | `/api/v1/superadmin/comments/bulk-status` | Bulk moderate       | Superadmin |
+| DELETE | `/api/v1/superadmin/comments/:id`         | Delete comment      | Superadmin |
+| POST   | `/api/v1/superadmin/comments/bulk-delete` | Bulk delete         | Superadmin |
+
 ## Project Structure
 
 ```

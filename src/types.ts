@@ -26,6 +26,7 @@ export interface User {
     email_verified: number;
     display_name: string | null;
     avatar_url: string | null;
+    is_admin: number;
     created_at: string;
     updated_at: string;
 }
@@ -121,4 +122,5 @@ export interface AuthUser {
     id: number;
     email: string;
     display_name: string | null;
+    is_admin: boolean;
 }

@@ -35,6 +35,7 @@ export async function getAuthUser(c: Context<{ Bindings: Env }>): Promise<AuthUs
         id: user.id,
         email: user.email,
         display_name: user.display_name,
+        is_admin: user.is_admin === 1,
     };
 }
 
@@ -45,6 +46,18 @@ export async function requireAuth(c: Context<{ Bindings: Env }>, next: Next) {
         return c.json({ error: 'Authentication required' }, 401);
     }
     // User is authenticated, continue
+    await next();
+}
+
+// Require superadmin authentication middleware
+export async function requireSuperAdmin(c: Context<{ Bindings: Env }>, next: Next) {
+    const user = await getAuthUser(c);
+    if (!user) {
+        return c.json({ error: 'Authentication required' }, 401);
+    }
+    if (!user.is_admin) {
+        return c.json({ error: 'Superadmin access required' }, 403);
+    }
     await next();
 }
 

@@ -1,1 +1,1 @@
-export { cors, getAuthUser, hashToken, requireAuth } from './auth';
+export { cors, getAuthUser, hashToken, requireAuth, requireSuperAdmin } from './auth';

@@ -427,4 +427,253 @@ export class Database {
     async deleteSession(tokenHash: string): Promise<void> {
         await this.db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(tokenHash).run();
     }
+
+    // ==========================================
+    // Admin queries - Global Analytics
+    // ==========================================
+
+    async getGlobalStats(): Promise<{
+        total_users: number;
+        total_sites: number;
+        total_pages: number;
+        total_comments: number;
+        pending_comments: number;
+        total_page_likes: number;
+        total_comment_likes: number;
+    }> {
+        const [users, sites, pages, comments, pending, pageLikes, commentLikes] = await Promise.all([
+            this.db.prepare('SELECT COUNT(*) as count FROM users').first<{ count: number }>(),
+            this.db.prepare('SELECT COUNT(*) as count FROM sites').first<{ count: number }>(),
+            this.db.prepare('SELECT COUNT(*) as count FROM pages').first<{ count: number }>(),
+            this.db.prepare('SELECT COUNT(*) as count FROM comments').first<{ count: number }>(),
+            this.db.prepare("SELECT COUNT(*) as count FROM comments WHERE status = 'pending'").first<{ count: number }>(),
+            this.db.prepare('SELECT COUNT(*) as count FROM page_likes').first<{ count: number }>(),
+            this.db.prepare('SELECT COUNT(*) as count FROM reactions').first<{ count: number }>(),
+        ]);
+
+        return {
+            total_users: users?.count ?? 0,
+            total_sites: sites?.count ?? 0,
+            total_pages: pages?.count ?? 0,
+            total_comments: comments?.count ?? 0,
+            pending_comments: pending?.count ?? 0,
+            total_page_likes: pageLikes?.count ?? 0,
+            total_comment_likes: commentLikes?.count ?? 0,
+        };
+    }
+
+    async getRecentActivity(limit: number = 10): Promise<{
+        recent_users: User[];
+        recent_sites: Site[];
+        recent_comments: Comment[];
+    }> {
+        const [users, sites, comments] = await Promise.all([
+            this.db.prepare('SELECT * FROM users ORDER BY created_at DESC LIMIT ?').bind(limit).all<User>(),
+            this.db.prepare('SELECT * FROM sites ORDER BY created_at DESC LIMIT ?').bind(limit).all<Site>(),
+            this.db.prepare('SELECT * FROM comments ORDER BY created_at DESC LIMIT ?').bind(limit).all<Comment>(),
+        ]);
+
+        return {
+            recent_users: users.results,
+            recent_sites: sites.results,
+            recent_comments: comments.results,
+        };
+    }
+
+    // ==========================================
+    // Admin queries - User Management
+    // ==========================================
+
+    async getAllUsers(options: { limit?: number; offset?: number; search?: string } = {}): Promise<{
+        users: User[];
+        total: number;
+    }> {
+        const { limit = 50, offset = 0, search } = options;
+
+        let countQuery = 'SELECT COUNT(*) as count FROM users';
+        let dataQuery = 'SELECT * FROM users';
+
+        if (search) {
+            const searchCondition = " WHERE email LIKE ? OR display_name LIKE ?";
+            countQuery += searchCondition;
+            dataQuery += searchCondition;
+        }
+
+        dataQuery += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+
+        const searchPattern = search ? `%${search}%` : null;
+
+        const countResult = search
+            ? await this.db.prepare(countQuery).bind(searchPattern, searchPattern).first<{ count: number }>()
+            : await this.db.prepare(countQuery).first<{ count: number }>();
+
+        const dataResult = search
+            ? await this.db.prepare(dataQuery).bind(searchPattern, searchPattern, limit, offset).all<User>()
+            : await this.db.prepare(dataQuery).bind(limit, offset).all<User>();
+
+        return {
+            users: dataResult.results,
+            total: countResult?.count ?? 0,
+        };
+    }
+
+    async setUserAdmin(userId: number, isAdmin: boolean): Promise<void> {
+        await this.db
+            .prepare("UPDATE users SET is_admin = ?, updated_at = datetime('now') WHERE id = ?")
+            .bind(isAdmin ? 1 : 0, userId)
+            .run();
+    }
+
+    async deleteUser(userId: number): Promise<void> {
+        await this.db.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
+    }
+
+    async getUserWithStats(userId: number): Promise<{
+        user: User | null;
+        stats: { sites_owned: number; comments_made: number; total_likes_given: number };
+    }> {
+        const user = await this.getUserById(userId);
+        if (!user) {
+            return { user: null, stats: { sites_owned: 0, comments_made: 0, total_likes_given: 0 } };
+        }
+
+        const [sites, comments, likes] = await Promise.all([
+            this.db.prepare('SELECT COUNT(*) as count FROM sites WHERE owner_id = ?').bind(userId).first<{ count: number }>(),
+            this.db.prepare('SELECT COUNT(*) as count FROM comments WHERE user_id = ?').bind(userId).first<{ count: number }>(),
+            this.db.prepare(
+                `SELECT COUNT(*) as count FROM (
+                    SELECT id FROM page_likes WHERE user_id = ?
+                    UNION ALL
+                    SELECT id FROM reactions WHERE user_id = ?
+                )`
+            ).bind(userId, userId).first<{ count: number }>(),
+        ]);
+
+        return {
+            user,
+            stats: {
+                sites_owned: sites?.count ?? 0,
+                comments_made: comments?.count ?? 0,
+                total_likes_given: likes?.count ?? 0,
+            },
+        };
+    }
+
+    // ==========================================
+    // Admin queries - Site Management
+    // ==========================================
+
+    async getAllSites(options: { limit?: number; offset?: number; search?: string } = {}): Promise<{
+        sites: (Site & { owner_email?: string })[];
+        total: number;
+    }> {
+        const { limit = 50, offset = 0, search } = options;
+
+        let countQuery = 'SELECT COUNT(*) as count FROM sites';
+        let dataQuery = `
+            SELECT s.*, u.email as owner_email 
+            FROM sites s 
+            LEFT JOIN users u ON s.owner_id = u.id
+        `;
+
+        if (search) {
+            const searchCondition = " WHERE s.name LIKE ? OR s.domain LIKE ?";
+            countQuery = 'SELECT COUNT(*) as count FROM sites s' + searchCondition;
+            dataQuery += searchCondition;
+        }
+
+        dataQuery += ' ORDER BY s.created_at DESC LIMIT ? OFFSET ?';
+
+        const searchPattern = search ? `%${search}%` : null;
+
+        const countResult = search
+            ? await this.db.prepare(countQuery).bind(searchPattern, searchPattern).first<{ count: number }>()
+            : await this.db.prepare(countQuery).first<{ count: number }>();
+
+        const dataResult = search
+            ? await this.db.prepare(dataQuery).bind(searchPattern, searchPattern, limit, offset).all<Site & { owner_email?: string }>()
+            : await this.db.prepare(dataQuery).bind(limit, offset).all<Site & { owner_email?: string }>();
+
+        return {
+            sites: dataResult.results,
+            total: countResult?.count ?? 0,
+        };
+    }
+
+    async transferSiteOwnership(siteId: number, newOwnerId: number): Promise<void> {
+        await this.db
+            .prepare("UPDATE sites SET owner_id = ?, updated_at = datetime('now') WHERE id = ?")
+            .bind(newOwnerId, siteId)
+            .run();
+    }
+
+    // ==========================================
+    // Admin queries - Comment Management
+    // ==========================================
+
+    async getAllComments(options: {
+        limit?: number;
+        offset?: number;
+        status?: string;
+        siteId?: number;
+    } = {}): Promise<{
+        comments: (Comment & { page_slug?: string; site_domain?: string })[];
+        total: number;
+    }> {
+        const { limit = 50, offset = 0, status, siteId } = options;
+
+        const conditions: string[] = [];
+        const params: (string | number)[] = [];
+
+        if (status) {
+            conditions.push('c.status = ?');
+            params.push(status);
+        }
+        if (siteId) {
+            conditions.push('c.site_id = ?');
+            params.push(siteId);
+        }
+
+        const whereClause = conditions.length > 0 ? ' WHERE ' + conditions.join(' AND ') : '';
+
+        const countQuery = `SELECT COUNT(*) as count FROM comments c${whereClause}`;
+        const dataQuery = `
+            SELECT c.*, p.slug as page_slug, s.domain as site_domain
+            FROM comments c
+            LEFT JOIN pages p ON c.page_id = p.id
+            LEFT JOIN sites s ON c.site_id = s.id
+            ${whereClause}
+            ORDER BY c.created_at DESC LIMIT ? OFFSET ?
+        `;
+
+        const countResult = await this.db.prepare(countQuery).bind(...params).first<{ count: number }>();
+        const dataResult = await this.db
+            .prepare(dataQuery)
+            .bind(...params, limit, offset)
+            .all<Comment & { page_slug?: string; site_domain?: string }>();
+
+        return {
+            comments: dataResult.results,
+            total: countResult?.count ?? 0,
+        };
+    }
+
+    async bulkUpdateCommentStatus(commentIds: number[], status: string): Promise<number> {
+        let updated = 0;
+        for (const id of commentIds) {
+            await this.updateCommentStatus(id, status);
+            updated++;
+        }
+        return updated;
+    }
+
+    async bulkDeleteComments(commentIds: number[]): Promise<number> {
+        let deleted = 0;
+        for (const id of commentIds) {
+            await this.deleteComment(id);
+            deleted++;
+        }
+        return deleted;
+    }
 }
+
