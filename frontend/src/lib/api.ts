@@ -151,10 +151,10 @@ export const superadmin = {
     getUser: (id: number) =>
         request<{ user: AdminUser; stats: UserStats }>(`/api/v1/superadmin/users/${id}`),
 
-    setUserAdmin: (id: number, is_admin: boolean) =>
-        request<{ id: number; is_admin: boolean; updated: boolean }>(
+    setUserSuperadmin: (id: number, is_superadmin: boolean) =>
+        request<{ id: number; is_superadmin: boolean; updated: boolean }>(
             `/api/v1/superadmin/users/${id}/admin`,
-            { method: 'PATCH', body: JSON.stringify({ is_admin }) }
+            { method: 'PATCH', body: JSON.stringify({ is_superadmin }) }
         ),
 
     deleteUser: (id: number) =>
@@ -202,7 +202,7 @@ export interface User {
     id: number;
     email: string;
     display_name: string | null;
-    is_admin: boolean;
+    is_superadmin: boolean;
 }
 
 export interface GlobalStats {
@@ -225,7 +225,7 @@ export interface AdminUser {
     email: string;
     display_name: string | null;
     email_verified: boolean;
-    is_admin: boolean;
+    is_superadmin: boolean;
     created_at: string;
     updated_at: string;
 }

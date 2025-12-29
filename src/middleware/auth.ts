@@ -35,7 +35,7 @@ export async function getAuthUser(c: Context<{ Bindings: Env }>): Promise<AuthUs
         id: user.id,
         email: user.email,
         display_name: user.display_name,
-        is_admin: user.is_admin === 1,
+        is_superadmin: user.is_superadmin === 1,
     };
 }
 
@@ -55,7 +55,7 @@ export async function requireSuperAdmin(c: Context<{ Bindings: Env }>, next: Nex
     if (!user) {
         return c.json({ error: 'Authentication required' }, 401);
     }
-    if (!user.is_admin) {
+    if (!user.is_superadmin) {
         return c.json({ error: 'Superadmin access required' }, 403);
     }
     await next();

@@ -18,7 +18,7 @@ export function DashboardLayout({ children, activeTab, onTabChange }: DashboardL
             <header className="border-b bg-card">
                 <div className="container mx-auto px-4 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-6">
-                        <h1 className="text-xl font-bold">ThreadEngine</h1>
+                        <h1 className="text-xl font-bold">CommentKit</h1>
                         <nav className="flex gap-1">
                             <Button
                                 variant={activeTab === 'overview' ? 'secondary' : 'ghost'}
@@ -41,7 +41,7 @@ export function DashboardLayout({ children, activeTab, onTabChange }: DashboardL
                             >
                                 Settings
                             </Button>
-                            {user?.is_admin && (
+                            {user?.is_superadmin && (
                                 <Button
                                     variant={activeTab === 'admin' ? 'secondary' : 'ghost'}
                                     size="sm"

@@ -94,7 +94,7 @@ auth.get('/verify', async (c) => {
             id: user.id,
             email: user.email,
             display_name: user.display_name,
-            is_admin: user.is_admin === 1,
+            is_superadmin: user.is_superadmin === 1,
         },
     });
 });
@@ -110,7 +110,7 @@ auth.get('/me', async (c) => {
         id: user.id,
         email: user.email,
         display_name: user.display_name,
-        is_admin: user.is_admin,
+        is_superadmin: user.is_superadmin,
     });
 });
 
@@ -136,7 +136,7 @@ auth.patch('/profile', zValidator('json', updateProfileSchema), async (c) => {
         id: user.id,
         email: user.email,
         display_name: body.display_name ?? user.display_name,
-        is_admin: user.is_admin,
+        is_superadmin: user.is_superadmin,
     });
 });
 

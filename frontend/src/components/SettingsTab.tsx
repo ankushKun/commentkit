@@ -111,7 +111,7 @@ export function SettingsTab() {
                 <CardHeader>
                     <CardTitle>API Integration</CardTitle>
                     <CardDescription>
-                        How to integrate ThreadEngine into your site
+                        How to integrate CommentKit into your site
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -130,12 +130,12 @@ export function SettingsTab() {
                     <div className="space-y-2">
                         <h4 className="font-medium">3. Integrate the widget</h4>
                         <p className="text-sm text-muted-foreground">
-                            Add the ThreadEngine widget to your pages:
+                            Add the CommentKit widget to your pages:
                         </p>
                         <pre className="p-4 rounded-lg bg-muted text-xs overflow-x-auto">
-                            {`<div id="thread-engine"></div>
-<script 
-  src="https://threadengine.example/widget.js" 
+                            {`<div id="commentkit"></div>
+<script
+  src="https://commentkit.io/widget.js"
   data-site-id="YOUR_SITE_ID"
 ></script>`}
                         </pre>

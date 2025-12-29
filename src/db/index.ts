@@ -527,10 +527,10 @@ export class Database {
         };
     }
 
-    async setUserAdmin(userId: number, isAdmin: boolean): Promise<void> {
+    async setUserSuperadmin(userId: number, isSuperadmin: boolean): Promise<void> {
         await this.db
-            .prepare("UPDATE users SET is_admin = ?, updated_at = datetime('now') WHERE id = ?")
-            .bind(isAdmin ? 1 : 0, userId)
+            .prepare("UPDATE users SET is_superadmin = ?, updated_at = datetime('now') WHERE id = ?")
+            .bind(isSuperadmin ? 1 : 0, userId)
             .run();
     }
 

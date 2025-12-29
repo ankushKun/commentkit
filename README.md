@@ -1,6 +1,6 @@
-# ThreadEngine Worker (Cloudflare Workers + D1)
+# CommentKit (Cloudflare Workers + D1)
 
-A TypeScript-based Cloudflare Workers implementation of ThreadEngine, using Hono as the web framework and D1 (SQLite) for persistence.
+A TypeScript-based Cloudflare Workers implementation of CommentKit, using Hono as the web framework and D1 (SQLite) for persistence.
 
 ## Prerequisites
 
@@ -25,7 +25,7 @@ bunx wrangler login
 ### 3. Create D1 Database
 
 ```bash
-bunx wrangler d1 create thread-engine-db
+bunx wrangler d1 create commentkit-db
 ```
 
 Copy the `database_id` from the output and update `wrangler.toml`:
@@ -33,7 +33,7 @@ Copy the `database_id` from the output and update `wrangler.toml`:
 ```toml
 [[d1_databases]]
 binding = "DB"
-database_name = "thread-engine-db"
+database_name = "commentkit-db"
 database_id = "YOUR_DATABASE_ID_HERE"  # <-- Replace this
 ```
 
@@ -183,17 +183,6 @@ worker/
 | `RESEND_API_KEY` | Resend API key for emails     | No       |
 | `BASE_URL`       | Base URL for magic links      | Yes      |
 | `ENVIRONMENT`    | `development` or `production` | Yes      |
-
-## Migrating from Go/PostgreSQL
-
-This is a rewrite of the original Go + PostgreSQL ThreadEngine. Key differences:
-
-1. **Database**: PostgreSQL → D1 (SQLite)
-2. **Runtime**: Go binary → Cloudflare Workers
-3. **Framework**: net/http → Hono
-4. **Language**: Go → TypeScript
-5. **Connection pooling**: Handled by D1 automatically
-6. **Triggers**: Implemented in application code
 
 ## License
 

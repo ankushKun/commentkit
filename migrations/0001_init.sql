@@ -1,4 +1,4 @@
--- ThreadEngine Schema for D1 (SQLite)
+-- CommentKit Schema for D1 (SQLite)
 -- Multi-site commenting and discussion backend
 
 -- ============================================
@@ -43,13 +43,13 @@ CREATE TABLE IF NOT EXISTS users (
   email_verified INTEGER NOT NULL DEFAULT 0,
   display_name TEXT,
   avatar_url TEXT,
-  is_admin INTEGER NOT NULL DEFAULT 0,
+  is_superadmin INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS idx_users_is_admin ON users(is_admin);
+CREATE INDEX IF NOT EXISTS idx_users_is_superadmin ON users(is_superadmin);
 
 -- ============================================
 -- MAGIC_LINKS: Passwordless authentication

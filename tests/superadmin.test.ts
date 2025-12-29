@@ -40,7 +40,7 @@ describe('Superadmin', () => {
         it('should return 401 without auth', async () => {
             const { status, json } = await api('/api/v1/superadmin/users/1/admin', {
                 method: 'PATCH',
-                body: JSON.stringify({ is_admin: true }),
+                body: JSON.stringify({ is_superadmin: true }),
             });
             expect(status).toBe(401);
             expect(json.error).toContain('Authentication required');

@@ -33,7 +33,7 @@ function Dashboard() {
       {activeTab === 'overview' && <OverviewTab />}
       {activeTab === 'sites' && <SitesTab />}
       {activeTab === 'settings' && <SettingsTab />}
-      {activeTab === 'admin' && user?.is_admin && <AdminTab />}
+      {activeTab === 'admin' && user?.is_superadmin && <AdminTab />}
     </DashboardLayout>
   );
 }

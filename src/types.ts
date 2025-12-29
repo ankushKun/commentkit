@@ -1,4 +1,4 @@
-// Type definitions for ThreadEngine
+// Type definitions for CommentKit
 
 export interface Site {
     id: number;
@@ -26,7 +26,7 @@ export interface User {
     email_verified: number;
     display_name: string | null;
     avatar_url: string | null;
-    is_admin: number;
+    is_superadmin: number;
     created_at: string;
     updated_at: string;
 }
@@ -123,5 +123,5 @@ export interface AuthUser {
     id: number;
     email: string;
     display_name: string | null;
-    is_admin: boolean;
+    is_superadmin: boolean;
 }

@@ -33,7 +33,7 @@ superadmin.get('/activity', async (c) => {
             id: u.id,
             email: u.email,
             display_name: u.display_name,
-            is_admin: u.is_admin === 1,
+            is_superadmin: u.is_superadmin === 1,
             created_at: u.created_at,
         })),
         recent_sites: activity.recent_sites.map((s) => ({
@@ -74,7 +74,7 @@ superadmin.get('/users', async (c) => {
         email: u.email,
         display_name: u.display_name,
         email_verified: u.email_verified === 1,
-        is_admin: u.is_admin === 1,
+        is_superadmin: u.is_superadmin === 1,
         created_at: u.created_at,
         updated_at: u.updated_at,
     }));
@@ -107,7 +107,7 @@ superadmin.get('/users/:id', async (c) => {
             email: result.user.email,
             display_name: result.user.display_name,
             email_verified: result.user.email_verified === 1,
-            is_admin: result.user.is_admin === 1,
+            is_superadmin: result.user.is_superadmin === 1,
             created_at: result.user.created_at,
             updated_at: result.user.updated_at,
         },
@@ -115,9 +115,9 @@ superadmin.get('/users/:id', async (c) => {
     });
 });
 
-// PATCH /api/v1/superadmin/users/:id/admin - Set user admin status
+// PATCH /api/v1/superadmin/users/:id/admin - Set user superadmin status
 const setAdminSchema = z.object({
-    is_admin: z.boolean(),
+    is_superadmin: z.boolean(),
 });
 
 superadmin.patch('/users/:id/admin', zValidator('json', setAdminSchema), async (c) => {
@@ -134,17 +134,17 @@ superadmin.patch('/users/:id/admin', zValidator('json', setAdminSchema), async (
         return c.json({ error: 'User not found' }, 404);
     }
 
-    // Prevent removing own admin status
+    // Prevent removing own superadmin status
     const currentUser = await getAuthUser(c);
-    if (currentUser?.id === userId && !body.is_admin) {
-        return c.json({ error: 'Cannot remove your own admin status' }, 400);
+    if (currentUser?.id === userId && !body.is_superadmin) {
+        return c.json({ error: 'Cannot remove your own superadmin status' }, 400);
     }
 
-    await db.setUserAdmin(userId, body.is_admin);
+    await db.setUserSuperadmin(userId, body.is_superadmin);
 
     return c.json({
         id: userId,
-        is_admin: body.is_admin,
+        is_superadmin: body.is_superadmin,
         updated: true,
     });
 });
@@ -169,9 +169,9 @@ superadmin.delete('/users/:id', async (c) => {
         return c.json({ error: 'Cannot delete your own account' }, 400);
     }
 
-    // Prevent deleting other admins
-    if (user.is_admin === 1) {
-        return c.json({ error: 'Cannot delete admin users. Remove admin status first.' }, 400);
+    // Prevent deleting other superadmins
+    if (user.is_superadmin === 1) {
+        return c.json({ error: 'Cannot delete superadmin users. Remove superadmin status first.' }, 400);
     }
 
     await db.deleteUser(userId);

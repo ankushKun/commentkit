@@ -87,11 +87,11 @@ export function AdminTab() {
         }
     };
 
-    const handleToggleAdmin = async (userId: number, currentStatus: boolean) => {
-        const action = currentStatus ? 'remove admin privileges from' : 'grant admin privileges to';
+    const handleToggleSuperadmin = async (userId: number, currentStatus: boolean) => {
+        const action = currentStatus ? 'remove superadmin privileges from' : 'grant superadmin privileges to';
         if (!confirm(`Are you sure you want to ${action} this user?`)) return;
 
-        const { error } = await superadmin.setUserAdmin(userId, !currentStatus);
+        const { error } = await superadmin.setUserSuperadmin(userId, !currentStatus);
         if (!error) {
             await loadUsers(userSearch || undefined);
         }
@@ -282,9 +282,9 @@ export function AdminTab() {
                                                 <span className="font-medium truncate">
                                                     {user.display_name || user.email}
                                                 </span>
-                                                {user.is_admin && (
+                                                {user.is_superadmin && (
                                                     <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
-                                                        Admin
+                                                        Superadmin
                                                     </span>
                                                 )}
                                                 {user.email_verified && (
@@ -303,16 +303,16 @@ export function AdminTab() {
                                         <div className="flex gap-1">
                                             <Button
                                                 size="sm"
-                                                variant={user.is_admin ? 'outline' : 'secondary'}
-                                                onClick={() => handleToggleAdmin(user.id, user.is_admin)}
+                                                variant={user.is_superadmin ? 'outline' : 'secondary'}
+                                                onClick={() => handleToggleSuperadmin(user.id, user.is_superadmin)}
                                             >
-                                                {user.is_admin ? 'Remove Admin' : 'Make Admin'}
+                                                {user.is_superadmin ? 'Remove Superadmin' : 'Make Superadmin'}
                                             </Button>
                                             <Button
                                                 size="sm"
                                                 variant="destructive"
                                                 onClick={() => handleDeleteUser(user.id)}
-                                                disabled={user.is_admin}
+                                                disabled={user.is_superadmin}
                                             >
                                                 Delete
                                             </Button>
