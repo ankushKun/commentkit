@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CommentKit Example - My Blog Post</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            line-height: 1.6;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .meta {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 30px;
+        }
+
+        article {
+            margin-bottom: 60px;
+        }
+
+        .comments-section {
+            margin-top: 60px;
+            padding-top: 40px;
+            border-top: 2px solid #eee;
+        }
+
+        .comments-section h2 {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <article>
+        <h1>My Awesome Blog Post</h1>
+        <div class="meta">Published on December 29, 2025 by John Doe</div>
+
+        <p>
+            This is an example blog post demonstrating CommentKit integration.
+            The comment widget below will automatically detect the domain and page URL.
+        </p>
+
+        <p>
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod
+            tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam,
+            quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+        </p>
+
+        <p>
+            Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore
+            eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt
+            in culpa qui officia deserunt mollit anim id est laborum.
+        </p>
+    </article>
+
+    <div class="comments-section">
+
+        <!-- CommentKit Widget -->
+        <div id="commentkit"></div>
+
+        <!-- 
+            BASIC USAGE: Just include the script - no configuration needed!
+            The widget will automatically:
+            - Detect the domain (e.g., example.com)
+            - Use the current page URL as the page identifier
+        -->
+        <script src="/commentkit.js"></script>
+
+        <!-- 
+            ALTERNATIVE: Use a custom page identifier
+            Useful when the URL changes but you want to keep the same comments
+        -->
+        <!-- <script src="/commentkit.js" data-page-id="my-first-blog-post"></script> -->
+
+        <!--
+            ADVANCED: Use configuration function for more control
+        -->
+        <!--
+        <script>
+            var commentkit_config = function () {
+                this.page.identifier = 'my-custom-page-id';
+                this.page.title = 'My Custom Page Title';
+                this.page.url = 'https://example.com/custom-url';
+            };
+        </script>
+        <script src="/commentkit.js"></script>
+        -->
+    </div>
+</body>
+
+</html>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { sites, comments as commentsApi, type SitePreview, type SiteDetail, type SiteStats, type Comment } from '@/lib/api';
+import { sites, comments as commentsApi, type SitePreview, type SiteDetailWithData, type Comment } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,9 +14,7 @@ import {
 
 export function SitesTab() {
     const [siteList, setSiteList] = useState<SitePreview[]>([]);
-    const [selectedSite, setSelectedSite] = useState<SiteDetail | null>(null);
-    const [siteStats, setSiteStats] = useState<SiteStats | null>(null);
-    const [siteComments, setSiteComments] = useState<Comment[]>([]);
+    const [selectedSite, setSelectedSite] = useState<SiteDetailWithData | null>(null);
     const [loading, setLoading] = useState(true);
     const [showCreateForm, setShowCreateForm] = useState(false);
 
@@ -41,16 +39,15 @@ export function SitesTab() {
         loadSites();
     }, []);
 
-    const loadSiteDetails = async (siteId: number) => {
-        const [detailRes, statsRes, commentsRes] = await Promise.all([
-            sites.get(siteId),
-            sites.stats(siteId),
-            sites.comments(siteId, { limit: 50 }),
-        ]);
-
-        if (detailRes.data) setSelectedSite(detailRes.data);
-        if (statsRes.data) setSiteStats(statsRes.data);
-        if (commentsRes.data) setSiteComments(commentsRes.data.comments);
+    // Single API call replaces 3 parallel calls (was: get + stats + comments)
+    const loadSiteDetails = async (siteId: number, status?: string) => {
+        const { data } = await sites.get(siteId, {
+            comment_limit: 50,
+            comment_status: status === 'all' ? undefined : status,
+        });
+        if (data) {
+            setSelectedSite(data);
+        }
     };
 
     const handleCreateSite = async (e: React.FormEvent) => {
@@ -96,7 +93,7 @@ export function SitesTab() {
     const handleModerateComment = async (commentId: number, status: 'approved' | 'rejected' | 'spam') => {
         await commentsApi.updateStatus(commentId, status);
         if (selectedSite) {
-            await loadSiteDetails(selectedSite.id);
+            await loadSiteDetails(selectedSite.id, commentFilter);
         }
     };
 
@@ -104,12 +101,13 @@ export function SitesTab() {
         if (!confirm('Delete this comment?')) return;
         await commentsApi.delete(commentId);
         if (selectedSite) {
-            await loadSiteDetails(selectedSite.id);
+            await loadSiteDetails(selectedSite.id, commentFilter);
         }
     };
 
-    const filteredComments = siteComments.filter(
-        (c) => commentFilter === 'all' || c.status === commentFilter
+    // Comments are now included in selectedSite, filter client-side for UI responsiveness
+    const filteredComments = (selectedSite?.comments ?? []).filter(
+        (c: Comment) => commentFilter === 'all' || c.status === commentFilter
     );
 
     if (loading) {
@@ -158,19 +156,19 @@ export function SitesTab() {
 
                             <div className="grid grid-cols-2 gap-4 text-center">
                                 <div className="p-3 rounded-lg bg-muted">
-                                    <div className="text-2xl font-bold">{siteStats?.total_pages || 0}</div>
+                                    <div className="text-2xl font-bold">{selectedSite.stats?.total_pages ?? 0}</div>
                                     <div className="text-xs text-muted-foreground">Pages</div>
                                 </div>
                                 <div className="p-3 rounded-lg bg-muted">
-                                    <div className="text-2xl font-bold">{siteStats?.total_comments || 0}</div>
+                                    <div className="text-2xl font-bold">{selectedSite.stats?.total_comments ?? 0}</div>
                                     <div className="text-xs text-muted-foreground">Comments</div>
                                 </div>
                                 <div className="p-3 rounded-lg bg-muted">
-                                    <div className="text-2xl font-bold">{siteStats?.pending_comments || 0}</div>
+                                    <div className="text-2xl font-bold">{selectedSite.stats?.pending_comments ?? 0}</div>
                                     <div className="text-xs text-muted-foreground">Pending</div>
                                 </div>
                                 <div className="p-3 rounded-lg bg-muted">
-                                    <div className="text-2xl font-bold">{siteStats?.total_likes || 0}</div>
+                                    <div className="text-2xl font-bold">{selectedSite.stats?.total_likes ?? 0}</div>
                                     <div className="text-xs text-muted-foreground">Likes</div>
                                 </div>
                             </div>

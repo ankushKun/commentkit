@@ -22,7 +22,7 @@ function Dashboard() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="min-h-screen py-12 px-4">
         <LoginForm />
       </div>
     );

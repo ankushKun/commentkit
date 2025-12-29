@@ -44,6 +44,16 @@ async function request<T>(
     }
 }
 
+// Bootstrap data type (returned with /auth/me?bootstrap=true)
+export interface BootstrapData {
+    sites: SitePreviewWithStats[];
+    aggregated: SiteStats;
+}
+
+export interface UserWithBootstrap extends User {
+    bootstrap?: BootstrapData;
+}
+
 // Auth
 export const auth = {
     login: (email: string) =>
@@ -55,7 +65,9 @@ export const auth = {
     verify: (token: string) =>
         request<{ token: string; user: User }>(`/api/v1/auth/verify?token=${token}`),
 
-    me: () => request<User>('/api/v1/auth/me'),
+    // Get current user, optionally with bootstrap data to save an extra API call
+    me: (options?: { bootstrap?: boolean }) =>
+        request<UserWithBootstrap>(`/api/v1/auth/me${options?.bootstrap ? '?bootstrap=true' : ''}`),
 
     logout: () =>
         request<{ message: string }>('/api/v1/auth/logout', { method: 'POST' }),
@@ -71,7 +83,21 @@ export const auth = {
 export const sites = {
     list: () => request<{ sites: SitePreview[] }>('/api/v1/admin/sites'),
 
-    get: (id: number) => request<SiteDetail>(`/api/v1/admin/sites/${id}`),
+    // Optimized: Get all sites with stats in a single call (for dashboard overview)
+    overview: () => request<{
+        sites: SitePreviewWithStats[];
+        aggregated: SiteStats;
+    }>('/api/v1/admin/sites/overview'),
+
+    // Optimized: Get site with stats and comments in a single call
+    get: (id: number, params?: { comment_status?: string; comment_limit?: number; comment_offset?: number }) => {
+        const query = new URLSearchParams();
+        if (params?.comment_status) query.set('comment_status', params.comment_status);
+        if (params?.comment_limit) query.set('comment_limit', String(params.comment_limit));
+        if (params?.comment_offset) query.set('comment_offset', String(params.comment_offset));
+        const queryStr = query.toString();
+        return request<SiteDetailWithData>(`/api/v1/admin/sites/${id}${queryStr ? `?${queryStr}` : ''}`);
+    },
 
     create: (name: string, domain: string) =>
         request<Site>('/api/v1/admin/sites', {
@@ -94,18 +120,6 @@ export const sites = {
         request<{ api_key: string }>(`/api/v1/admin/sites/${id}/regenerate-key`, {
             method: 'POST',
         }),
-
-    stats: (id: number) => request<SiteStats>(`/api/v1/admin/sites/${id}/stats`),
-
-    comments: (id: number, params?: { status?: string; limit?: number; offset?: number }) => {
-        const query = new URLSearchParams();
-        if (params?.status) query.set('status', params.status);
-        if (params?.limit) query.set('limit', String(params.limit));
-        if (params?.offset) query.set('offset', String(params.offset));
-        return request<{ comments: Comment[]; total: number }>(
-            `/api/v1/sites/${id}/comments?${query}`
-        );
-    },
 };
 
 // Comments management
@@ -266,6 +280,10 @@ export interface SitePreview {
     updated_at: string;
 }
 
+export interface SitePreviewWithStats extends SitePreview {
+    stats: SiteStats;
+}
+
 export interface SiteDetail {
     id: number;
     name: string;
@@ -274,6 +292,12 @@ export interface SiteDetail {
     settings: Record<string, unknown>;
     created_at: string;
     updated_at: string;
+}
+
+export interface SiteDetailWithData extends SiteDetail {
+    stats: SiteStats;
+    comments?: Comment[];
+    comments_total?: number;
 }
 
 export interface Site {

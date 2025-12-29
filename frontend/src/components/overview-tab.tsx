@@ -1,38 +1,30 @@
 import { useEffect, useState } from 'react';
-import { sites, type SitePreview, type SiteStats } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
+import { sites, type SitePreviewWithStats, type SiteStats } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export function OverviewTab() {
-    const [siteList, setSiteList] = useState<SitePreview[]>([]);
-    const [stats, setStats] = useState<{ total: SiteStats | null }>({ total: null });
+    const { consumeBootstrap } = useAuth();
+    const [siteList, setSiteList] = useState<SitePreviewWithStats[]>([]);
+    const [stats, setStats] = useState<SiteStats | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const loadData = async () => {
-            const { data } = await sites.list();
-            if (data?.sites) {
+            // Try to use cached bootstrap data from auth (saves API call on initial load)
+            const bootstrap = consumeBootstrap();
+            if (bootstrap) {
+                setSiteList(bootstrap.sites);
+                setStats(bootstrap.aggregated);
+                setLoading(false);
+                return;
+            }
+
+            // Fallback: fetch from API (e.g., when navigating back to overview)
+            const { data } = await sites.overview();
+            if (data) {
                 setSiteList(data.sites);
-
-                // Load stats for all sites
-                const allStats = await Promise.all(
-                    data.sites.map((site) => sites.stats(site.id))
-                );
-
-                // Aggregate stats
-                const totalStats = allStats.reduce(
-                    (acc, { data }) => {
-                        if (data) {
-                            acc.total_pages += data.total_pages;
-                            acc.total_comments += data.total_comments;
-                            acc.pending_comments += data.pending_comments;
-                            acc.total_likes += data.total_likes;
-                        }
-                        return acc;
-                    },
-                    { total_pages: 0, total_comments: 0, pending_comments: 0, total_likes: 0 }
-                );
-
-                setStats({ total: totalStats });
+                setStats(data.aggregated);
             }
             setLoading(false);
         };
@@ -68,20 +60,20 @@ export function OverviewTab() {
                 <Card>
                     <CardHeader className="pb-2">
                         <CardDescription>Total Pages</CardDescription>
-                        <CardTitle className="text-3xl">{stats.total?.total_pages || 0}</CardTitle>
+                        <CardTitle className="text-3xl">{stats?.total_pages ?? 0}</CardTitle>
                     </CardHeader>
                 </Card>
                 <Card>
                     <CardHeader className="pb-2">
                         <CardDescription>Total Comments</CardDescription>
-                        <CardTitle className="text-3xl">{stats.total?.total_comments || 0}</CardTitle>
+                        <CardTitle className="text-3xl">{stats?.total_comments ?? 0}</CardTitle>
                     </CardHeader>
                 </Card>
-                <Card className={stats.total?.pending_comments ? 'border-orange-500' : ''}>
+                <Card className={stats?.pending_comments ? 'border-orange-500' : ''}>
                     <CardHeader className="pb-2">
                         <CardDescription>Pending Moderation</CardDescription>
                         <CardTitle className="text-3xl">
-                            {stats.total?.pending_comments || 0}
+                            {stats?.pending_comments ?? 0}
                         </CardTitle>
                     </CardHeader>
                 </Card>

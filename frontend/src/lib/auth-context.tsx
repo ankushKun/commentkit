@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { auth, type User } from './api';
+import { createContext, useContext, useEffect, useState, useRef, type ReactNode } from 'react';
+import { auth, type User, type BootstrapData } from './api';
 
 interface AuthContextType {
     user: User | null;
@@ -8,6 +8,8 @@ interface AuthContextType {
     logout: () => Promise<void>;
     checkAuth: () => Promise<void>;
     updateUser: (user: User) => void;
+    // Bootstrap data - cached on initial load, consumed once
+    consumeBootstrap: () => BootstrapData | null;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -15,6 +17,8 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
+    // Store bootstrap data for one-time consumption by OverviewTab
+    const bootstrapRef = useRef<BootstrapData | null>(null);
 
     const checkAuth = async () => {
         const token = localStorage.getItem('auth_token');
@@ -23,12 +27,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return;
         }
 
-        const { data, error } = await auth.me();
+        // Request with bootstrap=true to get user + dashboard data in single call
+        const { data, error } = await auth.me({ bootstrap: true });
         if (error) {
             localStorage.removeItem('auth_token');
             setUser(null);
-        } else {
-            setUser(data);
+        } else if (data) {
+            // Store bootstrap data for consumption
+            if (data.bootstrap) {
+                bootstrapRef.current = data.bootstrap;
+            }
+            // Set user without bootstrap property
+            const { bootstrap: _, ...userData } = data;
+            setUser(userData);
         }
         setLoading(false);
     };
@@ -66,14 +77,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await auth.logout();
         localStorage.removeItem('auth_token');
         setUser(null);
+        bootstrapRef.current = null;
     };
 
     const updateUser = (updatedUser: User) => {
         setUser(updatedUser);
     };
 
+    // Consume bootstrap data (returns it once, then clears it)
+    const consumeBootstrap = () => {
+        const data = bootstrapRef.current;
+        bootstrapRef.current = null;
+        return data;
+    };
+
     return (
-        <AuthContext.Provider value={{ user, loading, login, logout, checkAuth, updateUser }}>
+        <AuthContext.Provider value={{ user, loading, login, logout, checkAuth, updateUser, consumeBootstrap }}>
             {children}
         </AuthContext.Provider>
     );

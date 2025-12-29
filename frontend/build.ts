@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
+// @ts-nocheck
 import plugin from "bun-plugin-tailwind";
 import { existsSync } from "fs";
-import { rm } from "fs/promises";
+import { rm, cp } from "fs/promises";
 import path from "path";
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
@@ -146,4 +147,26 @@ const outputTable = result.outputs.map(output => ({
 console.table(outputTable);
 const buildTime = (end - start).toFixed(2);
 
-console.log(`\n✅ Build completed in ${buildTime}ms\n`);
+console.log(`\n✅ Build completed in ${buildTime}ms`);
+
+// Copy public folder contents to dist
+const publicDir = path.join(process.cwd(), "public");
+
+if (existsSync(publicDir)) {
+  console.log(`\n📦 Copying public assets to ${path.relative(process.cwd(), outdir)}...`);
+
+  const { readdir } = await import("fs/promises");
+  const entries = await readdir(publicDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const srcPath = path.join(publicDir, entry.name);
+    const destPath = path.join(outdir, entry.name);
+    await cp(srcPath, destPath, { recursive: true });
+  }
+
+  console.log(`✅ Public assets copied successfully\n`);
+} else {
+  console.log(`\n⚠️  No public folder found at ${publicDir}\n`);
+}
+
+
