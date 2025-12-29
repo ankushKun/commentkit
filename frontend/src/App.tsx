@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { AuthProvider, useAuth } from '@/lib/auth-context';
-import { LoginForm } from '@/components/LoginForm';
-import { DashboardLayout, type TabType } from '@/components/DashboardLayout';
-import { OverviewTab } from '@/components/OverviewTab';
-import { SitesTab } from '@/components/SitesTab';
-import { SettingsTab } from '@/components/SettingsTab';
-import { AdminTab } from '@/components/AdminTab';
+import { LoginForm } from '@/components/login-form';
+import { DashboardLayout, type TabType } from '@/components/dashboard-layout';
+import { OverviewTab } from '@/components/overview-tab';
+import { SitesTab } from '@/components/sites-tab';
+import { SettingsTab } from '@/components/settings-tab';
+import { AdminTab } from '@/components/admin-tab';
 import './index.css';
 
 function Dashboard() {
