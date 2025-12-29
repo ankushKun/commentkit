@@ -11,10 +11,11 @@ database_id = "cce89088-e2cf-4b79-883d-22f5602473c6"
 [vars]
 ENVIRONMENT = "production"
 BASE_URL = "https://your-worker.your-subdomain.workers.dev"
+# FRONTEND_URL = "http://localhost:3000"
 
 # Dev environment overrides
 [env.dev]
-vars = { ENVIRONMENT = "development", BASE_URL = "http://localhost:8787" }
+vars = { ENVIRONMENT = "development", BASE_URL = "http://localhost:8787", FRONTEND_URL = "http://localhost:3000" }
 
 [[env.dev.d1_databases]]
 binding = "DB"

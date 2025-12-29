@@ -115,6 +115,7 @@ export interface Env {
     RESEND_API_KEY?: string;
     ENVIRONMENT: string;
     BASE_URL: string;
+    FRONTEND_URL?: string;
 }
 
 // Auth context

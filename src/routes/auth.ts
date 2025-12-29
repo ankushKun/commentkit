@@ -48,9 +48,9 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
     // Store magic link
     await db.createMagicLink(email, token, expiresAt);
 
-    // Build verify URL
-    const baseUrl = c.env.BASE_URL || 'http://localhost:8787';
-    const verifyUrl = `${baseUrl}/api/v1/auth/verify?token=${token}`;
+    // Build verify URL - use frontend URL if available, otherwise API URL
+    const frontendUrl = c.env.FRONTEND_URL;
+    const verifyUrl = `${frontendUrl}?token=${token}`;
 
     // Log for development
     console.log(`🔗 Magic link for ${email}: ${verifyUrl}`);
@@ -94,6 +94,7 @@ auth.get('/verify', async (c) => {
             id: user.id,
             email: user.email,
             display_name: user.display_name,
+            is_admin: user.is_admin === 1,
         },
     });
 });
@@ -106,11 +107,36 @@ auth.get('/me', async (c) => {
     }
 
     return c.json({
-        user: {
-            id: user.id,
-            email: user.email,
-            display_name: user.display_name,
-        },
+        id: user.id,
+        email: user.email,
+        display_name: user.display_name,
+        is_admin: user.is_admin,
+    });
+});
+
+// PATCH /api/v1/auth/profile - Update user profile
+const updateProfileSchema = z.object({
+    display_name: z.string().min(1).max(100).optional(),
+});
+
+auth.patch('/profile', zValidator('json', updateProfileSchema), async (c) => {
+    const user = await getAuthUser(c);
+    if (!user) {
+        return c.json({ error: 'Not authenticated' }, 401);
+    }
+
+    const body = c.req.valid('json');
+    const db = new Database(c.env.DB);
+
+    await db.updateUserProfile(user.id, {
+        display_name: body.display_name,
+    });
+
+    return c.json({
+        id: user.id,
+        email: user.email,
+        display_name: body.display_name ?? user.display_name,
+        is_admin: user.is_admin,
     });
 });
 

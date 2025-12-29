@@ -171,6 +171,16 @@ export class Database {
         return this.createUser(email);
     }
 
+    async updateUserProfile(
+        userId: number,
+        data: { display_name?: string }
+    ): Promise<void> {
+        await this.db
+            .prepare('UPDATE users SET display_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+            .bind(data.display_name ?? null, userId)
+            .run();
+    }
+
     // ==========================================
     // Comment queries
     // ==========================================
