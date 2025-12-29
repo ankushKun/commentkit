@@ -162,6 +162,16 @@ export const sites = {
                 body: JSON.stringify({ comment_ids: commentIds, action }),
             }
         ),
+
+    // Get verification token and instructions
+    getVerification: (id: number) =>
+        request<VerificationInfo>(`/api/v1/admin/sites/${id}/verification`),
+
+    // Trigger verification check
+    verify: (id: number) =>
+        request<VerificationResult>(`/api/v1/admin/sites/${id}/verify`, {
+            method: 'POST',
+        }),
 };
 
 // Comments management
@@ -319,6 +329,8 @@ export interface SitePreview {
     name: string;
     domain: string;
     api_key_preview: string;
+    verified: boolean;
+    verified_at: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -333,6 +345,8 @@ export interface SiteDetail {
     domain: string;
     api_key: string;
     settings: Record<string, unknown>;
+    verified: boolean;
+    verified_at: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -348,7 +362,23 @@ export interface Site {
     name: string;
     domain: string;
     api_key: string;
+    verified: boolean;
     created_at: string;
+}
+
+export interface VerificationInfo {
+    verified: boolean;
+    verified_at: string | null;
+    verification_token: string;
+    verification_file_path: string;
+    verification_file_content: string;
+    verification_url: string;
+}
+
+export interface VerificationResult {
+    verified: boolean;
+    message?: string;
+    error?: string;
 }
 
 export interface SiteStats {

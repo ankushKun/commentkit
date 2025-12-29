@@ -92,6 +92,27 @@ export class Database {
             .run();
     }
 
+    async setVerificationToken(id: number, token: string): Promise<void> {
+        await this.db
+            .prepare("UPDATE sites SET verification_token = ?, updated_at = datetime('now') WHERE id = ?")
+            .bind(token, id)
+            .run();
+    }
+
+    async markSiteVerified(id: number): Promise<void> {
+        await this.db
+            .prepare("UPDATE sites SET verified = 1, verified_at = datetime('now'), updated_at = datetime('now') WHERE id = ?")
+            .bind(id)
+            .run();
+    }
+
+    async resetSiteVerification(id: number): Promise<void> {
+        await this.db
+            .prepare("UPDATE sites SET verified = 0, verified_at = NULL, updated_at = datetime('now') WHERE id = ?")
+            .bind(id)
+            .run();
+    }
+
     async getSiteStats(siteId: number): Promise<{
         total_pages: number;
         total_comments: number;

@@ -19,6 +19,17 @@
         apiUrl: currentScript?.getAttribute('data-api-url') || window.COMMENTKIT_API_URL || scriptOrigin || '',
     };
 
+    // Check if current page is localhost/development
+    function isLocalhost() {
+        const hostname = window.location.hostname;
+        return hostname === 'localhost' ||
+            hostname === '127.0.0.1' ||
+            hostname === '0.0.0.0' ||
+            hostname.startsWith('192.168.') ||
+            hostname.startsWith('10.') ||
+            hostname.endsWith('.local');
+    }
+
     const CommentKit = {
         version: '2.0.0',
         instances: [],
@@ -52,6 +63,7 @@
                 theme,
                 widgetBase: CONFIG.baseUrl,  // Where widget iframe is served
                 apiBase: CONFIG.apiUrl,       // Where API calls go
+                isLocalhost: isLocalhost(),   // Whether we're on localhost
             });
 
             this.instances.push(instance);
@@ -86,8 +98,38 @@
             this.init();
         }
 
-        init() {
+        async init() {
             this.injectStyles();
+
+            // If not on localhost, verify the site is registered and verified
+            if (!this.config.isLocalhost) {
+                try {
+                    const verifyResponse = await fetch(`${this.config.apiBase}/api/v1/widget/verify-site?domain=${encodeURIComponent(this.config.domain)}`);
+                    const verifyData = await verifyResponse.json();
+
+                    if (!verifyResponse.ok || !verifyData.verified) {
+                        const rawError = verifyData.error;
+                        if (rawError && rawError.includes('Site not found')) {
+                            this.state.error = 'Comments are not enabled for this domain yet.';
+                            this.state.errorDetail = 'If you are the site owner, please add this domain in your CommentKit dashboard.';
+                            this.state.errorType = 'warning';
+                        } else {
+                            this.state.error = rawError || 'This site is not verified with CommentKit. Site owners must verify domain ownership to enable comments.';
+                            this.state.errorType = 'error';
+                        }
+                        this.state.loading = false;
+                        this.render();
+                        return;
+                    }
+                } catch (e) {
+                    console.error('[CommentKit] Failed to verify site:', e);
+                    this.state.error = 'Failed to verify site registration. Please try again later.';
+                    this.state.loading = false;
+                    this.render();
+                    return;
+                }
+            }
+
             this.setupMessageListener();
             this.createHiddenIframe();
             this.render();
@@ -488,6 +530,16 @@
                     border: 1px solid #fecaca;
                     font-size: 0.95rem;
                 }
+
+                .ck-warning {
+                    background: #fffbeb;
+                    color: #92400e;
+                    padding: 16px;
+                    border-radius: var(--ck-radius);
+                    margin-bottom: 24px;
+                    border: 1px solid #fcd34d;
+                    font-size: 0.95rem;
+                }
                 
                 .ck-footer {
                     margin-top: 56px;
@@ -701,7 +753,20 @@
                         this.render();
                         break;
                     case 'error':
-                        this.state.error = event.data.message;
+                        let message = event.data.message;
+                        let type = 'error';
+                        let detail = null;
+
+                        if (message && message.includes('Site not found')) {
+                            message = 'Comments are not enabled for this domain yet.';
+                            detail = 'If you are the site owner, please add this domain in your CommentKit dashboard.';
+                            type = 'warning';
+                        }
+
+                        this.state.error = message;
+                        this.state.errorDetail = detail;
+                        this.state.errorType = type;
+
                         this.state.loading = false;
                         this.state.authLoading = false;
                         this.render();
@@ -870,9 +935,14 @@
             }
 
             if (this.state.error) {
+                const isWarning = this.state.errorType === 'warning';
+
                 this.container.innerHTML = `
                     <div class="ck-widget">
-                        <div class="ck-error">${this.escapeHtml(this.state.error)}</div>
+                        <div class="${isWarning ? 'ck-warning' : 'ck-error'}">
+                            ${this.escapeHtml(this.state.error)}
+                            ${this.state.errorDetail ? `<div style="margin-top: 8px; font-size: 0.9em; opacity: 0.9;">${this.escapeHtml(this.state.errorDetail)}</div>` : ''}
+                        </div>
                     </div>
                 `;
                 return;

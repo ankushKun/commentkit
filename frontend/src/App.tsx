@@ -11,6 +11,17 @@ import './index.css';
 function Dashboard() {
   const { user, loading } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [autoShowCreateSite, setAutoShowCreateSite] = useState(false);
+
+  const handleNavigateToCreateSite = () => {
+    setAutoShowCreateSite(true);
+    setActiveTab('sites');
+  };
+
+  const handleTabChange = (tab: TabType) => {
+    setAutoShowCreateSite(false);
+    setActiveTab(tab);
+  };
 
   if (loading) {
     return (
@@ -30,9 +41,9 @@ function Dashboard() {
 
   return (
     <SiteProvider>
-      <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab}>
-        {activeTab === 'overview' && <OverviewTab />}
-        {activeTab === 'sites' && <SitesTab />}
+      <DashboardLayout activeTab={activeTab} onTabChange={handleTabChange}>
+        {activeTab === 'overview' && <OverviewTab onNavigateToSites={handleNavigateToCreateSite} />}
+        {activeTab === 'sites' && <SitesTab autoShowCreate={autoShowCreateSite} />}
         {activeTab === 'settings' && <SettingsTab />}
       </DashboardLayout>
     </SiteProvider>

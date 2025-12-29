@@ -7,6 +7,9 @@ export interface Site {
     api_key: string;
     owner_id: number | null;
     settings: string;
+    verified: number;
+    verification_token: string | null;
+    verified_at: string | null;
     created_at: string;
     updated_at: string;
 }

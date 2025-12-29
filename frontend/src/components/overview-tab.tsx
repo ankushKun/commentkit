@@ -14,12 +14,18 @@ import {
     Clock,
     CheckCircle2,
     ExternalLink,
-    ChevronRight
+    ChevronRight,
+    Plus,
+    Globe
 } from 'lucide-react';
 import { cn, formatTimeAgo } from '@/lib/utils';
 
-export function OverviewTab() {
-    const { currentSite, refreshSites } = useSite();
+interface OverviewTabProps {
+    onNavigateToSites?: () => void;
+}
+
+export function OverviewTab({ onNavigateToSites }: OverviewTabProps = {}) {
+    const { currentSite, sites, refreshSites } = useSite();
     const [loading, setLoading] = useState(true);
     const [pendingComments, setPendingComments] = useState<Comment[]>([]);
     const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
@@ -68,6 +74,28 @@ export function OverviewTab() {
     };
 
     if (!currentSite) {
+        // Check if user has no sites at all
+        if (sites.length === 0) {
+            return (
+                <div className="flex items-center justify-center h-96">
+                    <div className="text-center space-y-4">
+                        <div className="h-16 w-16 rounded-full bg-blue-50 flex items-center justify-center mx-auto">
+                            <Globe className="h-8 w-8 text-blue-600" />
+                        </div>
+                        <div className="space-y-2">
+                            <div className="text-xl font-semibold text-slate-900">Welcome to CommentKit</div>
+                            <p className="text-slate-600 max-w-sm">
+                                Get started by creating your first site to enable comments on your website.
+                            </p>
+                        </div>
+                        <Button onClick={onNavigateToSites} className="gap-2">
+                            <Plus className="h-4 w-4" /> Create Your First Site
+                        </Button>
+                    </div>
+                </div>
+            );
+        }
+
         return (
             <div className="flex items-center justify-center h-96">
                 <div className="text-center space-y-3">

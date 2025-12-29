@@ -41,5 +41,5 @@ const server = serve({
 
 console.log(`Server running at ${server.url}`);
 console.log(`- Dashboard: ${server.url}`);
-console.log(`- Widget: ${server.url}/widget`);
-console.log(`- Embed script: ${server.url}/commentkit.js`);
+console.log(`- Widget: ${server.url}widget`);
+console.log(`- Embed script: ${server.url}commentkit.js`);

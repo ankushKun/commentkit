@@ -11,6 +11,15 @@ import {
     MessageSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import logo from "../../icon.png"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export type TabType = 'overview' | 'sites' | 'settings';
 
@@ -39,9 +48,10 @@ export function DashboardLayout({ children, activeTab, onTabChange }: DashboardL
                 <div className="flex items-center gap-8">
                     {/* Logo */}
                     <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white shadow-sm font-bold text-sm">
+                        {/* <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white shadow-sm font-bold text-sm">
                             <MessageSquare className="h-4 w-4" />
-                        </div>
+                        </div> */}
+                        <img src={logo} alt="Logo" className="h-8 w-8" />
                         <span className="font-bold text-xl text-slate-900">CommentKit</span>
                     </div>
 
@@ -85,29 +95,36 @@ export function DashboardLayout({ children, activeTab, onTabChange }: DashboardL
                     <div className="h-6 w-px bg-slate-200" />
 
                     {/* User Menu */}
-                    <div className="flex items-center gap-3">
-                        <div className="text-right hidden sm:block">
-                            <div className="text-sm font-medium text-slate-900">
-                                {user?.display_name || user?.email?.split('@')[0] || 'User'}
-                            </div>
-                            <div className="text-xs text-slate-500">{user?.email}</div>
-                        </div>
-                        <Avatar
-                            emailHash={user?.email_hash}
-                            name={user?.display_name || user?.email}
-                            size="md"
-                            className="ring-2 ring-slate-100"
-                        />
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-9 w-9 text-slate-400 hover:text-slate-900 hover:bg-slate-100"
-                            onClick={logout}
-                            title="Sign out"
-                        >
-                            <LogOut className="h-4 w-4" />
-                        </Button>
-                    </div>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="flex items-center gap-3 h-auto p-2 hover:bg-slate-100">
+                                <div className="text-right hidden sm:block">
+                                    <div className="text-sm font-medium text-slate-900">
+                                        {user?.display_name || user?.email?.split('@')[0] || 'User'}
+                                    </div>
+                                    <div className="text-xs text-slate-500">{user?.email}</div>
+                                </div>
+                                <Avatar
+                                    emailHash={user?.email_hash}
+                                    name={user?.display_name || user?.email}
+                                    size="md"
+                                    className="ring-2 ring-slate-100"
+                                />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem disabled>
+                                <span className="text-xs text-muted-foreground">{user?.email}</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={logout} className="text-red-600 focus:text-red-600 cursor-pointer">
+                                <LogOut className="mr-2 h-4 w-4" />
+                                <span>Log out</span>
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </header>
 

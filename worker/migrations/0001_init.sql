@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS sites (
   api_key TEXT NOT NULL UNIQUE,
   owner_id INTEGER,
   settings TEXT DEFAULT '{}',
+  verified INTEGER NOT NULL DEFAULT 0,
+  verification_token TEXT UNIQUE,
+  verified_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -19,6 +22,7 @@ CREATE TABLE IF NOT EXISTS sites (
 CREATE INDEX IF NOT EXISTS idx_sites_domain ON sites(domain);
 CREATE INDEX IF NOT EXISTS idx_sites_api_key ON sites(api_key);
 CREATE INDEX IF NOT EXISTS idx_sites_owner ON sites(owner_id);
+CREATE INDEX IF NOT EXISTS idx_sites_verification_token ON sites(verification_token);
 
 -- ============================================
 -- PAGES: Page-scoped threads

@@ -15,6 +15,23 @@ function generateApiKey(): string {
     return Array.from(array, (byte) => chars[byte % chars.length]).join('');
 }
 
+// Check if domain is localhost or IP address
+function isLocalhostOrIP(domain: string): boolean {
+    // Localhost variations
+    if (domain === 'localhost' || domain.startsWith('localhost:')) return true;
+    if (domain === '127.0.0.1' || domain.startsWith('127.0.0.1:')) return true;
+    if (domain === '0.0.0.0' || domain.startsWith('0.0.0.0:')) return true;
+
+    // IPv4 pattern (with optional port)
+    const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}(:\d+)?$/;
+    if (ipv4Pattern.test(domain)) return true;
+
+    // IPv6 pattern (simplified check)
+    if (domain.startsWith('[') || domain.includes('::')) return true;
+
+    return false;
+}
+
 // GET /api/v1/sites - List user's sites
 sites.get('/', async (c) => {
     const user = await getAuthUser(c);
@@ -31,6 +48,8 @@ sites.get('/', async (c) => {
         name: site.name,
         domain: site.domain,
         api_key_preview: '********',
+        verified: !!site.verified,
+        verified_at: site.verified_at,
         created_at: site.created_at,
         updated_at: site.updated_at,
     }));
@@ -54,6 +73,8 @@ sites.get('/overview', async (c) => {
         name: site.name,
         domain: site.domain,
         api_key_preview: '********',
+        verified: !!site.verified,
+        verified_at: site.verified_at,
         created_at: site.created_at,
         updated_at: site.updated_at,
         stats: {
@@ -112,6 +133,8 @@ sites.get('/:id', async (c) => {
         domain: result.site.domain,
         api_key: 'HIDDEN',
         settings: JSON.parse(result.site.settings || '{}'),
+        verified: !!result.site.verified,
+        verified_at: result.site.verified_at,
         created_at: result.site.created_at,
         updated_at: result.site.updated_at,
         stats: result.stats,
@@ -137,6 +160,12 @@ sites.post('/', zValidator('json', createSiteSchema), async (c) => {
     const body = c.req.valid('json');
     const db = new Database(c.env.DB);
 
+    // Block localhost/IP addresses in production
+    const isProduction = c.env.ENVIRONMENT === 'production';
+    if (isProduction && isLocalhostOrIP(body.domain)) {
+        return c.json({ error: 'Localhost and IP addresses are not allowed as domains in production' }, 400);
+    }
+
     // Check if domain already exists
     const existingSite = await db.getSiteByDomain(body.domain);
     if (existingSite) {
@@ -152,6 +181,7 @@ sites.post('/', zValidator('json', createSiteSchema), async (c) => {
             name: site.name,
             domain: site.domain,
             api_key: site.api_key,
+            verified: false,
             created_at: site.created_at,
         },
         201
@@ -189,8 +219,15 @@ sites.patch('/:id', zValidator('json', updateSiteSchema), async (c) => {
     }
 
     // Check domain uniqueness if changing
-    if (body.domain && body.domain !== site.domain) {
-        const existingSite = await db.getSiteByDomain(body.domain);
+    const domainChanging = body.domain !== undefined && body.domain !== site.domain;
+    if (domainChanging) {
+        // Block localhost/IP addresses in production
+        const isProduction = c.env.ENVIRONMENT === 'production';
+        if (isProduction && isLocalhostOrIP(body.domain!)) {
+            return c.json({ error: 'Localhost and IP addresses are not allowed as domains in production' }, 400);
+        }
+
+        const existingSite = await db.getSiteByDomain(body.domain!);
         if (existingSite) {
             return c.json({ error: 'Domain already registered' }, 409);
         }
@@ -202,10 +239,17 @@ sites.patch('/:id', zValidator('json', updateSiteSchema), async (c) => {
         settings: body.settings ? JSON.stringify(body.settings) : undefined,
     });
 
+    // Reset verification if domain changed
+    if (domainChanging) {
+        await db.resetSiteVerification(siteId);
+    }
+
     return c.json({
         id: updated.id,
         name: updated.name,
         domain: updated.domain,
+        verified: domainChanging ? false : !!updated.verified,
+        verified_at: domainChanging ? null : updated.verified_at,
         settings: JSON.parse(updated.settings || '{}'),
         updated_at: updated.updated_at,
     });
@@ -266,6 +310,113 @@ sites.post('/:id/regenerate-key', async (c) => {
     await db.updateSiteApiKey(siteId, newApiKey);
 
     return c.json({ api_key: newApiKey });
+});
+
+// GET /api/v1/sites/:id/verification - Get verification token and instructions
+sites.get('/:id/verification', async (c) => {
+    const user = await getAuthUser(c);
+    if (!user) {
+        return c.json({ error: 'Authentication required' }, 401);
+    }
+
+    const siteId = parseInt(c.req.param('id'));
+    if (isNaN(siteId)) {
+        return c.json({ error: 'Invalid site_id' }, 400);
+    }
+
+    const db = new Database(c.env.DB);
+    const site = await db.getSiteById(siteId);
+
+    if (!site) {
+        return c.json({ error: 'Site not found' }, 404);
+    }
+
+    if (site.owner_id !== user.id) {
+        return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    // Generate token if not exists
+    let token = site.verification_token;
+    if (!token) {
+        token = generateApiKey(); // Reuse the same secure token generator
+        await db.setVerificationToken(siteId, token);
+    }
+
+    return c.json({
+        verified: !!site.verified,
+        verified_at: site.verified_at,
+        verification_token: token,
+        verification_file_path: '/.well-known/commentkit-verify.txt',
+        verification_file_content: token,
+        verification_url: `https://${site.domain}/.well-known/commentkit-verify.txt`,
+    });
+});
+
+// POST /api/v1/sites/:id/verify - Trigger verification check
+sites.post('/:id/verify', async (c) => {
+    const user = await getAuthUser(c);
+    if (!user) {
+        return c.json({ error: 'Authentication required' }, 401);
+    }
+
+    const siteId = parseInt(c.req.param('id'));
+    if (isNaN(siteId)) {
+        return c.json({ error: 'Invalid site_id' }, 400);
+    }
+
+    const db = new Database(c.env.DB);
+    const site = await db.getSiteById(siteId);
+
+    if (!site) {
+        return c.json({ error: 'Site not found' }, 404);
+    }
+
+    if (site.owner_id !== user.id) {
+        return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    if (!site.verification_token) {
+        return c.json({ error: 'No verification token generated. Get verification instructions first.' }, 400);
+    }
+
+    // Fetch the verification file from the user's domain
+    const verificationUrl = `https://${site.domain}/.well-known/commentkit-verify.txt`;
+
+    try {
+        const response = await fetch(verificationUrl, {
+            headers: {
+                'User-Agent': 'CommentKit-Verifier/1.0',
+            },
+        });
+
+        if (!response.ok) {
+            return c.json({
+                verified: false,
+                error: `Could not fetch verification file. HTTP status: ${response.status}`,
+            });
+        }
+
+        const content = await response.text();
+        const trimmedContent = content.trim();
+
+        if (trimmedContent === site.verification_token) {
+            await db.markSiteVerified(siteId);
+            return c.json({
+                verified: true,
+                message: 'Site successfully verified!',
+            });
+        } else {
+            return c.json({
+                verified: false,
+                error: 'Verification token does not match. Make sure the file contains only the verification token.',
+            });
+        }
+    } catch (error) {
+        return c.json({
+            verified: false,
+            error: `Could not reach ${verificationUrl}. Make sure the file is publicly accessible.`,
+        });
+    }
 });
 
 // GET /api/v1/sites/:id/stats - Get site statistics

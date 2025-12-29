@@ -2,10 +2,6 @@ name = "commentkit"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 
-# CPU time limit
-[limits]
-cpu_ms = 10
-
 # D1 Database binding - run `wrangler d1 create commentkit-db` and update the id
 [[d1_databases]]
 binding = "DB"
