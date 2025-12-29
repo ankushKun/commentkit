@@ -91,69 +91,421 @@
         }
 
         injectStyles() {
-            if (document.getElementById('commentkit-styles')) return;
+            // Remove existing styles to force update (useful for dev/HMR)
+            const existing = document.getElementById('commentkit-styles');
+            if (existing) existing.remove();
 
             const style = document.createElement('style');
             style.id = 'commentkit-styles';
             style.textContent = `
-                .ck-widget { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-                .ck-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #e5e7eb; }
-                .ck-title { font-size: 1.25rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-                .ck-count { background: #667eea; color: white; font-size: 0.75rem; padding: 2px 8px; border-radius: 12px; }
-                .ck-like-btn { display: flex; align-items: center; gap: 6px; padding: 6px 16px; border: 1px solid #e5e7eb; border-radius: 20px; background: white; cursor: pointer; font-size: 0.9rem; transition: all 0.2s; }
-                .ck-like-btn:hover { border-color: #667eea; color: #667eea; }
-                .ck-form { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 24px; }
-                .ck-form h3 { font-size: 1rem; margin-bottom: 16px; font-weight: 600; }
-                .ck-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-                @media (max-width: 640px) { .ck-form-row { grid-template-columns: 1fr; } }
-                .ck-form-group { margin-bottom: 12px; }
-                .ck-form-group label { display: block; font-size: 0.85rem; font-weight: 500; margin-bottom: 4px; }
-                .ck-form-group input, .ck-form-group textarea { width: 100%; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.95rem; font-family: inherit; }
-                .ck-form-group input:focus, .ck-form-group textarea:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15); }
-                .ck-form-group textarea { min-height: 80px; resize: vertical; }
-                .ck-btn { padding: 10px 20px; border-radius: 6px; font-size: 0.95rem; font-weight: 500; cursor: pointer; transition: all 0.2s; border: none; }
-                .ck-btn-primary { background: #667eea; color: white; }
-                .ck-btn-primary:hover { background: #5a6fd6; }
-                .ck-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-                .ck-btn-secondary { background: white; border: 1px solid #e5e7eb; color: #333; }
-                .ck-btn-secondary:hover { background: #f8f9fa; }
-                .ck-comment { padding: 16px 0; border-bottom: 1px solid #e5e7eb; }
-                .ck-comment:last-child { border-bottom: none; }
-                .ck-comment-header { display: flex; align-items: start; gap: 12px; margin-bottom: 8px; }
-                .ck-avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 0.9rem; flex-shrink: 0; }
-                .ck-comment-meta { flex: 1; }
-                .ck-comment-author { font-weight: 600; font-size: 0.95rem; }
-                .ck-comment-date { color: #6b7280; font-size: 0.8rem; margin-top: 2px; }
-                .ck-comment-body { margin-left: 48px; color: #333; font-size: 0.95rem; white-space: pre-wrap; word-wrap: break-word; }
-                .ck-comment-actions { margin-left: 48px; margin-top: 8px; display: flex; gap: 12px; }
-                .ck-comment-action { background: none; border: none; color: #6b7280; font-size: 0.8rem; cursor: pointer; padding: 4px 8px; border-radius: 4px; transition: all 0.2s; }
-                .ck-comment-action:hover { background: #f8f9fa; color: #667eea; }
-                .ck-replies { margin-left: 48px; margin-top: 12px; padding-left: 16px; border-left: 2px solid #e5e7eb; }
-                .ck-empty { text-align: center; padding: 40px 20px; color: #6b7280; }
-                .ck-loading { text-align: center; padding: 40px; color: #6b7280; }
-                .ck-spinner { width: 24px; height: 24px; border: 2px solid #e5e7eb; border-top-color: #667eea; border-radius: 50%; animation: ck-spin 0.8s linear infinite; margin: 0 auto 12px; }
+                .ck-widget {
+                    --ck-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+                    --ck-primary: #3b82f6;
+                    --ck-primary-hover: #2563eb;
+                    --ck-text: #1f2937;
+                    --ck-text-muted: #6b7280;
+                    --ck-border: #e5e7eb;
+                    --ck-bg: white;
+                    --ck-bg-muted: #f9fafb;
+                    --ck-danger: #ef4444;
+                    --ck-radius: 8px;
+                    
+                    font-family: var(--ck-font-family);
+                    color: var(--ck-text);
+                    line-height: 1.5;
+                    max-width: 100%;
+                }
+
+                .ck-widget * {
+                    box-sizing: border-box;
+                }
+
+                /* Header */
+                .ck-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 24px;
+                    padding-bottom: 16px;
+                    border-bottom: 1px solid var(--ck-border);
+                }
+
+                .ck-title {
+                    font-size: 1.125rem;
+                    font-weight: 700;
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    color: #111827;
+                }
+
+                .ck-count {
+                    background: var(--ck-bg-muted);
+                    color: var(--ck-text-muted);
+                    font-size: 0.75rem;
+                    font-weight: 600;
+                    padding: 2px 10px;
+                    border-radius: 12px;
+                    border: 1px solid var(--ck-border);
+                }
+
+                .ck-like-btn {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    padding: 6px 12px;
+                    border: 1px solid var(--ck-border);
+                    border-radius: 20px;
+                    background: white;
+                    color: var(--ck-text-muted);
+                    cursor: pointer;
+                    font-size: 0.875rem;
+                    font-weight: 500;
+                    transition: all 0.2s ease;
+                }
+
+                .ck-like-btn:hover {
+                    border-color: #d1d5db;
+                    background: var(--ck-bg-muted);
+                    color: var(--ck-text);
+                }
+
+                /* Forms */
+                .ck-form {
+                    padding: 0;
+                    margin-bottom: 32px;
+                }
+
+                .ck-form h3 {
+                    font-size: 1rem;
+                    margin: 0 0 16px 0;
+                    font-weight: 600;
+                    color: #374151;
+                }
+
+                .ck-form-row {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 16px;
+                    margin-bottom: 16px;
+                }
+
+                @media (max-width: 640px) {
+                    .ck-form-row { grid-template-columns: 1fr; }
+                }
+
+                .ck-form-group {
+                    margin-bottom: 16px;
+                }
+
+                .ck-form-group label {
+                    display: block;
+                    font-size: 0.875rem;
+                    font-weight: 500;
+                    margin-bottom: 6px;
+                    color: #4b5563;
+                }
+
+                .ck-form-group input, 
+                .ck-form-group textarea {
+                    width: 100%;
+                    padding: 12px;
+                    border: 1px solid var(--ck-border);
+                    border-radius: var(--ck-radius);
+                    font-size: 0.95rem;
+                    font-family: inherit;
+                    color: var(--ck-text);
+                    background: var(--ck-bg-muted);
+                    transition: all 0.2s;
+                }
+
+                .ck-form-group input:focus, 
+                .ck-form-group textarea:focus {
+                    outline: none;
+                    background: white;
+                    border-color: var(--ck-primary);
+                    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+                }
+
+                .ck-form-group textarea {
+                    min-height: 120px;
+                    resize: vertical;
+                    line-height: 1.6;
+                }
+
+                /* Buttons */
+                .ck-btn {
+                    display: inline-flex;
+                    justify-content: center;
+                    align-items: center;
+                    padding: 10px 24px;
+                    border-radius: var(--ck-radius);
+                    font-size: 0.95rem;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    border: 1px solid transparent;
+                    line-height: 1.25rem;
+                }
+
+                .ck-btn-primary {
+                    background: var(--ck-primary);
+                    color: white;
+                    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+                }
+
+                .ck-btn-primary:hover {
+                    background: var(--ck-primary-hover);
+                    transform: translateY(-1px);
+                }
+
+                .ck-btn-primary:active {
+                    transform: translateY(0);
+                }
+
+                .ck-btn-primary:disabled {
+                    opacity: 0.7;
+                    cursor: not-allowed;
+                    transform: none;
+                }
+
+                .ck-btn-secondary {
+                    background: white;
+                    border-color: var(--ck-border);
+                    color: #374151;
+                }
+
+                .ck-btn-secondary:hover {
+                    background: #f3f4f6;
+                }
+
+                /* User Info Card */
+                .ck-user-info {
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    margin-bottom: 20px;
+                    padding: 4px;
+                }
+
+                .ck-user-info .ck-avatar {
+                    width: 40px;
+                    height: 40px;
+                    font-size: 0.9rem;
+                    box-shadow: none;
+                    border: 1px solid var(--ck-border);
+                }
+
+                .ck-user-details {
+                    flex: 1;
+                }
+
+                .ck-user-name {
+                    font-weight: 600;
+                    font-size: 0.95rem;
+                    color: var(--ck-text);
+                }
+
+                .ck-user-email {
+                    font-size: 0.85rem;
+                    color: var(--ck-text-muted);
+                }
+
+                .ck-logout-btn {
+                    background: transparent;
+                    border: none;
+                    color: var(--ck-text-muted);
+                    font-size: 0.85rem;
+                    cursor: pointer;
+                    padding: 4px 8px;
+                    text-decoration: underline;
+                    transition: color 0.2s;
+                    font-family: inherit;
+                }
+
+                .ck-logout-btn:hover {
+                    color: var(--ck-danger);
+                }
+                
+                /* Auth Toggle */
+                .ck-auth-toggle {
+                    display: flex;
+                    gap: 4px;
+                    margin-bottom: 20px;
+                    background: var(--ck-bg-muted);
+                    padding: 4px;
+                    border-radius: var(--ck-radius);
+                    border: 1px solid var(--ck-border);
+                }
+
+                .ck-auth-toggle button {
+                    flex: 1;
+                    padding: 8px 12px;
+                    border: none;
+                    background: transparent;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-size: 0.875rem;
+                    font-weight: 600;
+                    color: #6b7280;
+                    transition: all 0.15s;
+                }
+
+                .ck-auth-toggle button.active {
+                    background: white;
+                    color: var(--ck-primary);
+                    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                }
+
+                /* Comments List */
+                .ck-comments {
+                    margin-top: 40px;
+                }
+
+                .ck-comment {
+                    margin-bottom: 32px;
+                    animation: ck-fade-in 0.3s ease-out;
+                }
+                
+                @keyframes ck-fade-in {
+                    from { opacity: 0; transform: translateY(10px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+
+                .ck-comment-inner {
+                    display: flex;
+                    gap: 16px;
+                }
+
+                .ck-avatar {
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 50%;
+                    background: #eff6ff;
+                    color: var(--ck-primary);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-weight: 700;
+                    font-size: 0.95rem;
+                    flex-shrink: 0;
+                    border: 1px solid #dbeafe;
+                }
+
+                .ck-comment-content {
+                    flex: 1;
+                    min-width: 0;
+                }
+
+                .ck-comment-header {
+                    display: flex;
+                    align-items: baseline;
+                    gap: 10px;
+                    margin-bottom: 6px;
+                }
+
+                .ck-comment-author {
+                    font-weight: 700;
+                    font-size: 0.95rem;
+                    color: #111827;
+                }
+
+                .ck-comment-date {
+                    color: #9ca3af;
+                    font-size: 0.8rem;
+                }
+
+                .ck-comment-body {
+                    color: #374151;
+                    font-size: 1rem;
+                    line-height: 1.6;
+                    white-space: pre-wrap;
+                    word-wrap: break-word;
+                    margin-bottom: 12px;
+                }
+
+                .ck-comment-actions {
+                    display: flex;
+                    gap: 16px;
+                }
+
+                .ck-comment-action {
+                    background: none;
+                    border: none;
+                    color: #6b7280;
+                    font-size: 0.85rem;
+                    font-weight: 600;
+                    cursor: pointer;
+                    padding: 0;
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    transition: color 0.15s;
+                }
+
+                .ck-comment-action:hover {
+                    color: var(--ck-primary);
+                }
+                
+                .ck-comment-action.liked {
+                    color: var(--ck-danger);
+                }
+
+                /* Threaded Replies */
+                .ck-replies {
+                    margin-top: 24px;
+                    margin-left: 20px;
+                    padding-left: 24px;
+                    border-left: 2px solid #f3f4f6;
+                }
+
+                /* States */
+                .ck-empty, .ck-loading {
+                    text-align: center;
+                    padding: 60px 20px;
+                    color: var(--ck-text-muted);
+                }
+
+                .ck-spinner {
+                    width: 24px;
+                    height: 24px;
+                    border: 2px solid #e5e7eb;
+                    border-top-color: var(--ck-primary);
+                    border-radius: 50%;
+                    animation: ck-spin 0.8s linear infinite;
+                    margin: 0 auto 16px;
+                }
+
                 @keyframes ck-spin { to { transform: rotate(360deg); } }
-                .ck-error { background: #fef2f2; color: #ef4444; padding: 12px; border-radius: 6px; margin-bottom: 16px; }
-                .ck-success { background: #ecfdf5; color: #10b981; padding: 12px; border-radius: 6px; margin-bottom: 16px; }
-                .ck-footer { margin-top: 32px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 0.8rem; color: #6b7280; }
-                .ck-footer a { color: #667eea; text-decoration: none; }
-                .ck-footer a:hover { text-decoration: underline; }
-                .ck-auth-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
-                .ck-auth-toggle button { flex: 1; padding: 10px; border: 1px solid #e5e7eb; background: white; border-radius: 6px; cursor: pointer; font-size: 0.9rem; transition: all 0.2s; }
-                .ck-auth-toggle button.active { background: #667eea; color: white; border-color: #667eea; }
-                .ck-auth-toggle button:not(.active):hover { background: #f8f9fa; }
-                .ck-user-info { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px; background: #f0f4ff; border-radius: 8px; }
-                .ck-user-info .ck-avatar { width: 32px; height: 32px; font-size: 0.8rem; }
-                .ck-user-details { flex: 1; }
-                .ck-user-name { font-weight: 600; font-size: 0.9rem; }
-                .ck-user-email { font-size: 0.8rem; color: #6b7280; }
-                .ck-logout-btn { background: none; border: none; color: #6b7280; font-size: 0.8rem; cursor: pointer; padding: 4px 8px; }
-                .ck-logout-btn:hover { color: #ef4444; }
-                .ck-login-sent { background: #ecfdf5; padding: 16px; border-radius: 8px; text-align: center; }
-                .ck-login-sent p { margin: 0 0 8px; color: #065f46; }
-                .ck-login-sent .email { font-weight: 600; }
-                .ck-link-btn { background: none; border: none; color: #667eea; cursor: pointer; font-size: inherit; padding: 0; text-decoration: underline; }
-                .ck-link-btn:hover { color: #5a6fd6; }
+
+                .ck-error {
+                    background: #fef2f2;
+                    color: #b91c1c;
+                    padding: 16px;
+                    border-radius: var(--ck-radius);
+                    margin-bottom: 24px;
+                    border: 1px solid #fecaca;
+                    font-size: 0.95rem;
+                }
+                
+                .ck-footer {
+                    margin-top: 56px;
+                    padding-top: 24px;
+                    border-top: 1px solid var(--ck-border);
+                    text-align: center;
+                    font-size: 0.8px;
+                    color: #9ca3af;
+                }
+                
+                .ck-footer a {
+                    color: #d1d5db;
+                    text-decoration: none;
+                    transition: color 0.15s;
+                }
+                
+                .ck-footer a:hover {
+                    color: #9ca3af;
+                }
             `;
             document.head.appendChild(style);
         }
@@ -264,7 +616,7 @@
                     <div class="ck-widget">
                         <div class="ck-loading">
                             <div class="ck-spinner"></div>
-                            <p>Loading comments...</p>
+                            <p>Loading conversation...</p>
                         </div>
                     </div>
                 `;
@@ -287,12 +639,14 @@
                 <div class="ck-widget">
                     <div class="ck-header">
                         <div class="ck-title">
-                            Comments
+                            Discussion
                             ${pageData.comment_count > 0 ? `<span class="ck-count">${pageData.comment_count}</span>` : ''}
                         </div>
                         <button class="ck-like-btn">
-                            <span>❤️</span>
-                            <span>${pageData.likes > 0 ? pageData.likes : 'Like'}</span>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                            </svg>
+                            <span>${pageData.likes > 0 ? pageData.likes : 'Like Page'}</span>
                         </button>
                     </div>
 
@@ -424,20 +778,35 @@
         renderComment(comment, depth = 0) {
             const initials = comment.author_name ? comment.author_name.charAt(0).toUpperCase() : '?';
             const timeAgo = this.formatTimeAgo(comment.created_at);
+            const isLiked = false; // TODO: Track user likes
 
             return `
                 <div class="ck-comment" data-id="${comment.id}">
-                    <div class="ck-comment-header">
+                    <div class="ck-comment-inner">
                         <div class="ck-avatar">${initials}</div>
-                        <div class="ck-comment-meta">
-                            <div class="ck-comment-author">${this.escapeHtml(comment.author_name)}</div>
-                            <div class="ck-comment-date">${timeAgo}</div>
+                        <div class="ck-comment-content">
+                            <div class="ck-comment-header">
+                                <span class="ck-comment-author">${this.escapeHtml(comment.author_name)}</span>
+                                <span class="ck-comment-date">${timeAgo}</span>
+                            </div>
+                            <div class="ck-comment-body">${this.escapeHtml(comment.content)}</div>
+                            <div class="ck-comment-actions">
+                                <button class="ck-comment-action ${isLiked ? 'liked' : ''}">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                                    </svg>
+                                    ${comment.likes > 0 ? comment.likes : 'Like'}
+                                </button>
+                                ${depth === 0 ? `
+                                    <button class="ck-comment-action ck-reply-btn" data-id="${comment.id}">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                                        </svg>
+                                        Reply
+                                    </button>
+                                ` : ''}
+                            </div>
                         </div>
-                    </div>
-                    <div class="ck-comment-body">${this.escapeHtml(comment.content)}</div>
-                    <div class="ck-comment-actions">
-                        <button class="ck-comment-action">❤️ ${comment.likes > 0 ? comment.likes : 'Like'}</button>
-                        ${depth === 0 ? `<button class="ck-comment-action ck-reply-btn" data-id="${comment.id}">Reply</button>` : ''}
                     </div>
                     ${comment.replies && comment.replies.length > 0 ? `
                         <div class="ck-replies">
