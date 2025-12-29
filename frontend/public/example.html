@@ -69,19 +69,22 @@
         <!-- CommentKit Widget -->
         <div id="commentkit"></div>
 
-        <!-- 
+        <!--
             BASIC USAGE: Just include the script - no configuration needed!
             The widget will automatically:
             - Detect the domain (e.g., example.com)
             - Use the current page URL as the page identifier
-        -->
-        <script src="/commentkit.js"></script>
 
-        <!-- 
+            For development, specify data-api-url to point to the backend server.
+            In production (when frontend and API are on same origin), this isn't needed.
+        -->
+        <script src="/commentkit.js" data-api-url="http://localhost:8787"></script>
+
+        <!--
             ALTERNATIVE: Use a custom page identifier
             Useful when the URL changes but you want to keep the same comments
         -->
-        <!-- <script src="/commentkit.js" data-page-id="my-first-blog-post"></script> -->
+        <!-- <script src="/commentkit.js" data-page-id="my-first-blog-post" data-api-url="http://localhost:8787"></script> -->
 
         <!--
             ADVANCED: Use configuration function for more control

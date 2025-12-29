@@ -4,19 +4,298 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CommentKit Widget</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            overflow-x: hidden;
-        }
-    </style>
+    <title>CommentKit Bridge</title>
 </head>
 
 <body>
-    <div id="widget-root"></div>
-    <script type="module" src="./widget.tsx"></script>
+    <script>
+        // This iframe acts as a bridge for cross-domain authentication and API calls
+        (function () {
+            const params = new URLSearchParams(window.location.search);
+
+            // parentOrigin MUST be explicitly provided - never allow wildcard for security
+            const parentOrigin = params.get('parentOrigin');
+            if (!parentOrigin || parentOrigin === '*') {
+                console.error('[CommentKit Bridge] Valid parentOrigin parameter is required for security');
+                return;
+            }
+
+            // API base can be passed as param, or defaults to iframe's own origin
+            const apiBase = params.get('apiBase') || window.location.origin;
+
+            // CSRF token must be provided for mutation requests
+            const csrfToken = params.get('csrfToken') || '';
+
+            const CONFIG = {
+                apiBase: apiBase,
+                domain: params.get('domain') || '',
+                pageId: params.get('pageId') || '',
+                parentOrigin: parentOrigin,
+                csrfToken: csrfToken
+            };
+
+            console.log('[CommentKit Bridge] Initialized with:', CONFIG);
+
+            // Session management - aligned with main app
+            const AUTH_TOKEN_KEY = 'auth_token';
+            let currentUser = null;
+
+            function getAuthToken() {
+                try {
+                    return localStorage.getItem(AUTH_TOKEN_KEY);
+                } catch (e) {
+                    return null;
+                }
+            }
+
+            function setAuthToken(token) {
+                try {
+                    if (token) {
+                        localStorage.setItem(AUTH_TOKEN_KEY, token);
+                    } else {
+                        localStorage.removeItem(AUTH_TOKEN_KEY);
+                    }
+                } catch (e) {
+                    console.error('[CommentKit Bridge] Failed to save auth token:', e);
+                }
+            }
+
+            function getAuthHeaders() {
+                const token = getAuthToken();
+                const headers = { 'Content-Type': 'application/json' };
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+                return headers;
+            }
+
+            // Check authentication status
+            async function checkAuth() {
+                const token = getAuthToken();
+                if (!token) {
+                    currentUser = null;
+                    return null;
+                }
+
+                try {
+                    const user = await apiCall('/api/v1/auth/me');
+                    currentUser = user;
+                    return user;
+                } catch (e) {
+                    // Token invalid or expired
+                    console.log('[CommentKit Bridge] Auth check failed:', e.message);
+                    setAuthToken(null);
+                    currentUser = null;
+                    return null;
+                }
+            }
+
+            // Send auth state to parent
+            function sendAuthState() {
+                window.parent.postMessage({
+                    type: 'commentkit',
+                    action: 'authStateChanged',
+                    user: currentUser
+                }, CONFIG.parentOrigin);
+            }
+
+            // API helper
+            async function apiCall(path, options = {}) {
+                const url = CONFIG.apiBase + path;
+                const headers = getAuthHeaders();
+
+                const response = await fetch(url, {
+                    ...options,
+                    headers: { ...headers, ...options.headers }
+                });
+
+                // Handle non-JSON responses gracefully
+                const contentType = response.headers.get('content-type') || '';
+                if (!contentType.includes('application/json')) {
+                    const text = await response.text();
+                    throw new Error(response.ok ? 'Invalid response format' : `Server error: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                // Check for HTTP errors even with JSON response
+                if (!response.ok) {
+                    throw new Error(data.error || data.message || `Request failed: ${response.status}`);
+                }
+
+                return data;
+            }
+
+            // Message handler
+            window.addEventListener('message', async (event) => {
+                if (event.origin !== CONFIG.parentOrigin) {
+                    console.log('[CommentKit Bridge] Ignored message from:', event.origin);
+                    return;
+                }
+
+                const message = event.data;
+                if (!message || message.type !== 'commentkit') return;
+
+                console.log('[CommentKit Bridge] Received action:', message.action);
+
+                try {
+                    switch (message.action) {
+                        case 'loadComments': {
+                            const params = new URLSearchParams({
+                                domain: message.domain,
+                                pageId: message.pageId,
+                                title: message.pageTitle || '',
+                                url: message.pageUrl || ''
+                            });
+
+                            const data = await apiCall(`/api/v1/sites/comments?${params}`);
+
+                            window.parent.postMessage({
+                                type: 'commentkit',
+                                action: 'commentsLoaded',
+                                data: data
+                            }, CONFIG.parentOrigin);
+                            break;
+                        }
+
+                        case 'postComment': {
+                            // Validate CSRF token before processing mutation
+                            if (!CONFIG.csrfToken || message.csrfToken !== CONFIG.csrfToken) {
+                                console.error('[CommentKit Bridge] CSRF token mismatch');
+                                window.parent.postMessage({
+                                    type: 'commentkit',
+                                    action: 'error',
+                                    message: 'Security validation failed. Please refresh and try again.'
+                                }, CONFIG.parentOrigin);
+                                break;
+                            }
+
+                            // Build comment payload - authenticated users don't need name/email
+                            const commentPayload = {
+                                domain: message.domain,
+                                pageId: message.pageId,
+                                content: message.content,
+                                parent_id: message.parent_id || undefined,
+                                page_title: message.pageTitle,
+                                page_url: message.pageUrl
+                            };
+
+                            // Only include guest fields if not authenticated
+                            if (!currentUser) {
+                                commentPayload.author_name = message.author_name;
+                                commentPayload.author_email = message.author_email || undefined;
+                            }
+
+                            const data = await apiCall('/api/v1/sites/comments', {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRF-Token': CONFIG.csrfToken
+                                },
+                                body: JSON.stringify(commentPayload)
+                            });
+
+                            if (data.error) {
+                                window.parent.postMessage({
+                                    type: 'commentkit',
+                                    action: 'error',
+                                    message: data.error
+                                }, CONFIG.parentOrigin);
+                            } else {
+                                window.parent.postMessage({
+                                    type: 'commentkit',
+                                    action: 'commentPosted',
+                                    data: data
+                                }, CONFIG.parentOrigin);
+                            }
+                            break;
+                        }
+
+                        case 'login': {
+                            // Send magic link to email
+                            try {
+                                await apiCall('/api/v1/auth/login', {
+                                    method: 'POST',
+                                    body: JSON.stringify({ email: message.email })
+                                });
+                                window.parent.postMessage({
+                                    type: 'commentkit',
+                                    action: 'loginEmailSent',
+                                    email: message.email
+                                }, CONFIG.parentOrigin);
+                            } catch (e) {
+                                window.parent.postMessage({
+                                    type: 'commentkit',
+                                    action: 'error',
+                                    message: e.message || 'Failed to send login email'
+                                }, CONFIG.parentOrigin);
+                            }
+                            break;
+                        }
+
+                        case 'verifyToken': {
+                            // Verify magic link token
+                            try {
+                                const result = await apiCall(`/api/v1/auth/verify?token=${encodeURIComponent(message.token)}`);
+                                if (result.token) {
+                                    setAuthToken(result.token);
+                                    currentUser = result.user;
+                                    sendAuthState();
+                                }
+                            } catch (e) {
+                                window.parent.postMessage({
+                                    type: 'commentkit',
+                                    action: 'error',
+                                    message: e.message || 'Invalid or expired login link'
+                                }, CONFIG.parentOrigin);
+                            }
+                            break;
+                        }
+
+                        case 'logout': {
+                            try {
+                                if (getAuthToken()) {
+                                    await apiCall('/api/v1/auth/logout', { method: 'POST' });
+                                }
+                            } catch (e) {
+                                // Ignore logout errors
+                            }
+                            setAuthToken(null);
+                            currentUser = null;
+                            sendAuthState();
+                            break;
+                        }
+
+                        case 'checkAuth': {
+                            await checkAuth();
+                            sendAuthState();
+                            break;
+                        }
+
+                        default:
+                            console.log('[CommentKit Bridge] Unknown action:', message.action);
+                    }
+                } catch (error) {
+                    console.error('[CommentKit Bridge] Error:', error);
+                    window.parent.postMessage({
+                        type: 'commentkit',
+                        action: 'error',
+                        message: error.message || 'An error occurred'
+                    }, CONFIG.parentOrigin);
+                }
+            });
+
+            // Check auth status and notify parent that bridge is ready
+            (async () => {
+                await checkAuth();
+                window.parent.postMessage({
+                    type: 'commentkit',
+                    action: 'bridgeReady',
+                    user: currentUser
+                }, CONFIG.parentOrigin);
+                console.log('[CommentKit Bridge] Ready and listening, user:', currentUser?.email || 'guest');
+            })();
+        })();
+    </script>
 </body>
 
 </html>
