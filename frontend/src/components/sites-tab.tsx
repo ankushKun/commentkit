@@ -174,25 +174,14 @@ export function SitesTab() {
                         </div>
                     </div>
                     <div className="flex gap-2">
-                        <Button variant="outline" size="sm" className="gap-2" onClick={() => handleRegenerateKey(selectedSite.id)}>
-                            <RefreshCw className="h-3.5 w-3.5" /> Key
-                        </Button>
+
                         <Button variant="destructive" size="sm" className="gap-2" onClick={() => handleDeleteSite(selectedSite.id)}>
                             <Trash2 className="h-3.5 w-3.5" /> Delete
                         </Button>
                     </div>
                 </div>
 
-                {/* API Key Banner (Simulating "Shortcuts" or Info/Config area) */}
-                <div className="bg-blue-50 border border-blue-100 p-3 rounded-md flex items-center justify-between text-sm text-blue-800">
-                    <div className="flex items-center gap-2">
-                        <span className="font-semibold">API Key:</span>
-                        <code className="bg-white/50 px-2 py-0.5 rounded font-mono">{selectedSite.api_key}</code>
-                    </div>
-                    <Button variant="ghost" size="sm" className="h-6 text-blue-700 hover:bg-blue-100" onClick={() => navigator.clipboard.writeText(selectedSite.api_key)}>
-                        <Copy className="h-3 w-3 mr-1" /> Copy
-                    </Button>
-                </div>
+                {/* API Key Banner Removed */}
 
                 {/* Tabs & Toolbar */}
                 <div className="space-y-4">

@@ -268,6 +268,42 @@
                             break;
                         }
 
+                        case 'togglePageLike': {
+                            if (!currentUser) {
+                                throw new Error('Authentication required');
+                            }
+
+                            const method = message.shouldLike ? 'POST' : 'DELETE';
+                            const data = await apiCall(`/api/v1/pages/${message.pageId}/likes`, {
+                                method
+                            });
+
+                            window.parent.postMessage({
+                                type: 'commentkit',
+                                messageId: message.messageId,
+                                data: data
+                            }, CONFIG.parentOrigin);
+                            break;
+                        }
+
+                        case 'toggleCommentLike': {
+                            if (!currentUser) {
+                                throw new Error('Authentication required');
+                            }
+
+                            const method = message.shouldLike ? 'POST' : 'DELETE';
+                            const data = await apiCall(`/api/v1/comments/${message.commentId}/likes`, {
+                                method
+                            });
+
+                            window.parent.postMessage({
+                                type: 'commentkit',
+                                messageId: message.messageId,
+                                data: data
+                            }, CONFIG.parentOrigin);
+                            break;
+                        }
+
                         case 'checkAuth': {
                             await checkAuth();
                             sendAuthState();

@@ -174,6 +174,16 @@
                     color: var(--ck-text);
                 }
 
+                .ck-like-btn.liked {
+                    border-color: #fecaca;
+                    background: #fef2f2;
+                    color: var(--ck-danger);
+                }
+
+                .ck-like-btn.liked svg {
+                    fill: currentColor;
+                }
+
                 /* Forms */
                 .ck-form {
                     padding: 0;
@@ -745,6 +755,67 @@
             }
         }
 
+        togglePageLike(pageId, shouldLike) {
+            return new Promise((resolve, reject) => {
+                const messageId = Date.now() + Math.random();
+                const handler = (event) => {
+                    if (event.data.type === 'commentkit' && event.data.messageId === messageId) {
+                        window.removeEventListener('message', handler);
+                        if (event.data.error) {
+                            reject(new Error(event.data.error));
+                        } else {
+                            resolve(event.data.data);
+                        }
+                    }
+                };
+                window.addEventListener('message', handler);
+
+                this.sendToIframe({
+                    action: 'togglePageLike',
+                    messageId,
+                    pageId,
+                    shouldLike,
+                });
+
+                // Timeout after 5 seconds
+                setTimeout(() => {
+                    window.removeEventListener('message', handler);
+                    reject(new Error('Timeout'));
+                }, 5000);
+            });
+        }
+
+        toggleCommentLike(commentId, shouldLike) {
+            return new Promise((resolve, reject) => {
+                const messageId = Date.now() + Math.random();
+                const handler = (event) => {
+                    if (event.data.type === 'commentkit' && event.data.messageId === messageId) {
+                        window.removeEventListener('message', handler);
+                        if (event.data.error) {
+                            reject(new Error(event.data.error));
+                        } else {
+                            resolve(event.data.data);
+                        }
+                    }
+                };
+                window.addEventListener('message', handler);
+
+                this.sendToIframe({
+                    action: 'toggleCommentLike',
+                    messageId,
+                    commentId,
+                    shouldLike,
+                });
+
+                // Timeout after 5 seconds
+                setTimeout(() => {
+                    window.removeEventListener('message', handler);
+                    reject(new Error('Timeout'));
+                }, 5000);
+            });
+        }
+
+
         // Generate Gravatar avatar HTML with fallback to initials
         renderAvatar(emailHash, name, cssClass = 'ck-avatar') {
             const displayName = name || 'Anonymous';
@@ -817,7 +888,7 @@
                             Discussion
                             ${pageData.comment_count > 0 ? `<span class="ck-count">${pageData.comment_count}</span>` : ''}
                         </div>
-                        <button class="ck-like-btn">
+                        <button class="ck-like-btn ${pageData.user_liked ? 'liked' : ''}">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
                             </svg>
@@ -973,7 +1044,7 @@
 
         renderComment(comment, depth = 0) {
             const timeAgo = this.formatTimeAgo(comment.created_at);
-            const isLiked = false; // TODO: Track user likes
+            const isLiked = comment.user_liked || false;
             const hasReplies = comment.replies && comment.replies.length > 0;
             const replyCount = hasReplies ? comment.replies.length : 0;
             const isExpanded = this.state.expandedReplies.has(comment.id);
@@ -989,7 +1060,7 @@
                             </div>
                             <div class="ck-comment-body">${this.escapeHtml(comment.content)}</div>
                             <div class="ck-comment-actions">
-                                <button class="ck-comment-action ${isLiked ? 'liked' : ''}">
+                                <button class="ck-comment-action ${isLiked ? 'liked' : ''}" data-id="${comment.id}">
                                     ${comment.likes > 0 ? `<span>${comment.likes}</span>` : ''}
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
@@ -1219,6 +1290,118 @@
                     this.sendToIframe({ action: 'logout' });
                 });
             }
+
+            // Page like button
+            const pageLikeBtn = this.container.querySelector('.ck-like-btn');
+            if (pageLikeBtn) {
+                pageLikeBtn.addEventListener('click', async () => {
+                    if (!this.state.user) {
+                        // Redirect to login if not authenticated
+                        this.state.authMode = 'login';
+                        this.render();
+                        return;
+                    }
+
+                    const pageData = this.state.pageData;
+                    if (!pageData) return;
+
+                    // Optimistic UI update
+                    const isCurrentlyLiked = pageData.user_liked;
+                    pageData.user_liked = !isCurrentlyLiked;
+                    pageData.likes += isCurrentlyLiked ? -1 : 1;
+
+                    // Update button immediately
+                    pageLikeBtn.classList.toggle('liked', pageData.user_liked);
+                    const likesSpan = pageLikeBtn.querySelector('span');
+                    if (likesSpan) {
+                        likesSpan.textContent = pageData.likes > 0 ? pageData.likes : 'Like Page';
+                    }
+
+                    // Make API call
+                    try {
+                        const response = await this.togglePageLike(pageData.page_id, !isCurrentlyLiked);
+                        if (response && response.total_likes !== undefined) {
+                            // Update with server response
+                            pageData.likes = response.total_likes;
+                            pageData.user_liked = response.user_liked;
+                            pageLikeBtn.classList.toggle('liked', pageData.user_liked);
+                            if (likesSpan) {
+                                likesSpan.textContent = pageData.likes > 0 ? pageData.likes : 'Like Page';
+                            }
+                        }
+                    } catch (error) {
+                        // Revert on error
+                        pageData.user_liked = isCurrentlyLiked;
+                        pageData.likes += isCurrentlyLiked ? 1 : -1;
+                        pageLikeBtn.classList.toggle('liked', pageData.user_liked);
+                        if (likesSpan) {
+                            likesSpan.textContent = pageData.likes > 0 ? pageData.likes : 'Like Page';
+                        }
+                    }
+                });
+            }
+
+            // Comment like buttons
+            this.container.querySelectorAll('.ck-comment-action').forEach(btn => {
+                // Skip if it's a reply button (which also has ck-comment-action class)
+                if (btn.classList.contains('ck-reply-btn')) return;
+
+                btn.addEventListener('click', async () => {
+                    if (!this.state.user) {
+                        // Redirect to login if not authenticated
+                        this.state.authMode = 'login';
+                        this.render();
+                        return;
+                    }
+
+                    const commentId = parseInt(btn.dataset.id);
+                    const comment = this.commentMap.get(commentId);
+                    if (!comment) return;
+
+                    // Optimistic UI update
+                    const isCurrentlyLiked = comment.user_liked;
+                    comment.user_liked = !isCurrentlyLiked;
+                    comment.likes += isCurrentlyLiked ? -1 : 1;
+
+                    // Update button immediately
+                    btn.classList.toggle('liked', comment.user_liked);
+                    const svgHtml = `<svg width="16" height="16" viewBox="0 0 24 24" fill="${comment.user_liked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>`;
+
+                    if (comment.likes > 0) {
+                        btn.innerHTML = `<span>${comment.likes}</span> ${svgHtml}`;
+                    } else {
+                        btn.innerHTML = svgHtml;
+                    }
+
+                    // Make API call
+                    try {
+                        const response = await this.toggleCommentLike(commentId, !isCurrentlyLiked);
+                        if (response && response.total_likes !== undefined) {
+                            // Update with server response
+                            comment.likes = response.total_likes;
+                            comment.user_liked = response.user_liked;
+                            btn.classList.toggle('liked', comment.user_liked);
+                            const newSvgHtml = `<svg width="16" height="16" viewBox="0 0 24 24" fill="${comment.user_liked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>`;
+                            if (comment.likes > 0) {
+                                btn.innerHTML = `<span>${comment.likes}</span> ${newSvgHtml}`;
+                            } else {
+                                btn.innerHTML = newSvgHtml;
+                            }
+                        }
+                    } catch (error) {
+                        // Revert on error
+                        comment.user_liked = isCurrentlyLiked;
+                        comment.likes += isCurrentlyLiked ? 1 : -1;
+                        btn.classList.toggle('liked', comment.user_liked);
+                        const revertSvgHtml = `<svg width="16" height="16" viewBox="0 0 24 24" fill="${comment.user_liked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>`;
+                        if (comment.likes > 0) {
+                            btn.innerHTML = `<span>${comment.likes}</span> ${revertSvgHtml}`;
+                        } else {
+                            btn.innerHTML = revertSvgHtml;
+                        }
+                    }
+                });
+            });
         }
 
         attachInlineReplyFormListeners(formElement, parentId) {
@@ -1434,6 +1617,7 @@
                     }
                 });
             });
+
         });
 
         observer.observe(document.body, {

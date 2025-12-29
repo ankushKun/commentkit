@@ -30,7 +30,7 @@ sites.get('/', async (c) => {
         id: site.id,
         name: site.name,
         domain: site.domain,
-        api_key_preview: site.api_key.slice(0, 8) + '...',
+        api_key_preview: '********',
         created_at: site.created_at,
         updated_at: site.updated_at,
     }));
@@ -53,7 +53,7 @@ sites.get('/overview', async (c) => {
         id: site.id,
         name: site.name,
         domain: site.domain,
-        api_key_preview: site.api_key.slice(0, 8) + '...',
+        api_key_preview: '********',
         created_at: site.created_at,
         updated_at: site.updated_at,
         stats: {
@@ -110,7 +110,7 @@ sites.get('/:id', async (c) => {
         id: result.site.id,
         name: result.site.name,
         domain: result.site.domain,
-        api_key: result.site.api_key,
+        api_key: 'HIDDEN',
         settings: JSON.parse(result.site.settings || '{}'),
         created_at: result.site.created_at,
         updated_at: result.site.updated_at,
