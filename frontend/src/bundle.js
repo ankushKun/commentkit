@@ -96,6 +96,7 @@
                 loginSent: false,        // Magic link sent
                 authLoading: false,      // Auth action in progress
                 expandedReplies: new Set(),  // Track which comments have expanded replies
+                guestCommentSent: false, // Guest comment awaiting moderation
             };
             this.commentMap = new Map();  // Store comment data by ID for quick access
             this.scrollAnchor = null;  // Element to anchor scroll position to
@@ -697,6 +698,492 @@
                 .ck-inline-reply-form textarea {
                     min-height: 80px;
                 }
+
+                /* Toast notification */
+                @keyframes ck-toast-in {
+                    from {
+                        opacity: 0;
+                        transform: translateX(-50%) translateY(100px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateX(-50%) translateY(0);
+                    }
+                }
+
+                @keyframes ck-toast-out {
+                    from {
+                        opacity: 1;
+                        transform: translateX(-50%) translateY(0) scale(1);
+                    }
+                    to {
+                        opacity: 0;
+                        transform: translateX(-50%) translateY(20px) scale(0.95);
+                    }
+                }
+
+                .ck-toast {
+                    position: fixed;
+                    bottom: 24px;
+                    left: 50%;
+                    transform: translateX(-50%) translateY(100px);
+                    background: #1f2937;
+                    color: white;
+                    padding: 12px 20px;
+                    border-radius: var(--ck-radius);
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                    font-size: 0.9rem;
+                    font-weight: 500;
+                    z-index: 10000;
+                    opacity: 0;
+                    pointer-events: none;
+                    max-width: 90%;
+                    text-align: center;
+                }
+
+                .ck-toast.show {
+                    animation: ck-toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                    pointer-events: auto;
+                }
+
+                .ck-toast.hide {
+                    animation: ck-toast-out 0.25s cubic-bezier(0.4, 0, 1, 1) forwards;
+                    pointer-events: none;
+                }
+
+                .ck-toast a {
+                    color: #93c5fd;
+                    text-decoration: none;
+                    margin-left: 8px;
+                    font-weight: 600;
+                }
+
+                .ck-toast a:hover {
+                    color: #bfdbfe;
+                    text-decoration: underline;
+                }
+
+                @media (max-width: 640px) {
+                    @keyframes ck-toast-in {
+                        from {
+                            opacity: 0;
+                            transform: translateY(100px);
+                        }
+                        to {
+                            opacity: 1;
+                            transform: translateY(0);
+                        }
+                    }
+
+                    @keyframes ck-toast-out {
+                        from {
+                            opacity: 1;
+                            transform: translateY(0) scale(1);
+                        }
+                        to {
+                            opacity: 0;
+                            transform: translateY(20px) scale(0.95);
+                        }
+                    }
+
+                    .ck-toast {
+                        bottom: 16px;
+                        left: 16px;
+                        right: 16px;
+                        transform: translateY(100px);
+                        max-width: none;
+                    }
+                }
+
+                /* Login Modal */
+                @keyframes ck-modal-overlay-in {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+
+                @keyframes ck-modal-overlay-out {
+                    from { opacity: 1; }
+                    to { opacity: 0; }
+                }
+
+                @keyframes ck-modal-content-in {
+                    from {
+                        opacity: 0;
+                        transform: translate(-50%, -48%) scale(0.96);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translate(-50%, -50%) scale(1);
+                    }
+                }
+
+                @keyframes ck-modal-content-out {
+                    from {
+                        opacity: 1;
+                        transform: translate(-50%, -50%) scale(1);
+                    }
+                    to {
+                        opacity: 0;
+                        transform: translate(-50%, -48%) scale(0.96);
+                    }
+                }
+
+                .ck-modal-overlay {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0, 0, 0, 0.6);
+                    backdrop-filter: blur(8px);
+                    -webkit-backdrop-filter: blur(8px);
+                    z-index: 10001;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    opacity: 0;
+                }
+
+                .ck-modal-overlay.show {
+                    animation: ck-modal-overlay-in 0.2s ease-out forwards;
+                }
+
+                .ck-modal-overlay.hide {
+                    animation: ck-modal-overlay-out 0.2s ease-out forwards;
+                }
+
+                .ck-modal-content {
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background: white;
+                    border-radius: 16px;
+                    box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.02);
+                    max-width: 440px;
+                    width: calc(100% - 32px);
+                    max-height: calc(100vh - 64px);
+                    display: flex;
+                    flex-direction: column;
+                    overflow: hidden;
+                    opacity: 0;
+                }
+
+                .ck-modal-overlay.show .ck-modal-content {
+                    animation: ck-modal-content-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                }
+
+                .ck-modal-overlay.hide .ck-modal-content {
+                    animation: ck-modal-content-out 0.2s ease-out forwards;
+                }
+
+                .ck-modal-header {
+                    padding: 32px 32px 24px;
+                    border-bottom: 1px solid #e5e7eb;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-start;
+                    background: linear-gradient(to bottom, #ffffff 0%, #fafafa 100%);
+                    flex-shrink: 0;
+                }
+
+                .ck-modal-title {
+                    font-size: 1.5rem;
+                    font-weight: 700;
+                    color: #111827;
+                    margin: 0;
+                    line-height: 1.3;
+                    letter-spacing: -0.025em;
+                }
+
+                .ck-modal-close {
+                    background: transparent;
+                    border: none;
+                    color: #9ca3af;
+                    cursor: pointer;
+                    padding: 6px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: 6px;
+                    transition: all 0.15s ease;
+                    margin-top: -2px;
+                }
+
+                .ck-modal-close:hover {
+                    background: #f3f4f6;
+                    color: #4b5563;
+                    transform: scale(1.05);
+                }
+
+                .ck-modal-close:active {
+                    transform: scale(0.95);
+                }
+
+                .ck-modal-body {
+                    padding: 32px;
+                    overflow-y: auto;
+                    flex: 1 1 auto;
+                    min-height: 0;
+                }
+
+                .ck-modal-body .ck-form-group {
+                    margin-bottom: 24px;
+                }
+
+                .ck-modal-body .ck-form-group label {
+                    display: block;
+                    font-size: 0.875rem;
+                    font-weight: 600;
+                    margin-bottom: 10px;
+                    color: #374151;
+                }
+
+                .ck-modal-body .ck-form-group input {
+                    width: 100%;
+                    padding: 12px 14px;
+                    border: 1.5px solid #e5e7eb;
+                    border-radius: 8px;
+                    font-size: 1rem;
+                    font-family: inherit;
+                    color: var(--ck-text);
+                    background: white;
+                    transition: all 0.2s;
+                    box-sizing: border-box;
+                }
+
+                .ck-modal-body .ck-form-group input:focus {
+                    outline: none;
+                    border-color: var(--ck-primary);
+                    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+                }
+
+                .ck-modal-body button.ck-btn,
+                .ck-modal-body .ck-btn {
+                    width: 100%;
+                    padding: 12px 24px;
+                    font-size: 1rem;
+                    font-weight: 600;
+                    box-sizing: border-box;
+                    display: inline-flex;
+                    justify-content: center;
+                    align-items: center;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+
+                .ck-modal-body button.ck-btn-primary,
+                .ck-modal-body button.ck-btn.ck-btn-primary,
+                .ck-modal-body .ck-btn.ck-btn-primary {
+                    background-color: #3b82f6 !important;
+                    color: #ffffff !important;
+                    border: 1px solid transparent !important;
+                    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+                }
+
+                .ck-modal-body button.ck-btn-primary:hover:not(:disabled),
+                .ck-modal-body button.ck-btn.ck-btn-primary:hover:not(:disabled),
+                .ck-modal-body .ck-btn.ck-btn-primary:hover:not(:disabled) {
+                    background-color: #2563eb !important;
+                    transform: translateY(-1px);
+                }
+
+                .ck-modal-body button.ck-btn-primary:active,
+                .ck-modal-body button.ck-btn.ck-btn-primary:active,
+                .ck-modal-body .ck-btn.ck-btn-primary:active {
+                    transform: translateY(0);
+                }
+
+                .ck-modal-body button.ck-btn-primary:disabled,
+                .ck-modal-body button.ck-btn.ck-btn-primary:disabled,
+                .ck-modal-body .ck-btn.ck-btn-primary:disabled {
+                    opacity: 0.7;
+                    cursor: not-allowed;
+                    transform: none;
+                }
+
+                .ck-modal-body p {
+                    line-height: 1.6;
+                }
+
+                /* Modal-specific login sent styling */
+                .ck-modal-body .ck-login-sent {
+                    background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+                    border: 1px solid #dbeafe;
+                    border-radius: 12px;
+                    padding: 32px 24px;
+                    text-align: center;
+                }
+
+                .ck-modal-body .ck-login-sent .ck-email-icon {
+                    width: 56px;
+                    height: 56px;
+                    background: white;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin: 0 auto 20px;
+                    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+                }
+
+                .ck-modal-body .ck-login-sent .ck-email-icon svg {
+                    color: var(--ck-primary);
+                }
+
+                .ck-modal-body .ck-login-sent p {
+                    margin: 0 0 12px 0;
+                    color: #1f2937;
+                    font-size: 0.95rem;
+                    line-height: 1.6;
+                }
+
+                .ck-modal-body .ck-login-sent p strong {
+                    font-size: 1.125rem;
+                    font-weight: 700;
+                    color: #111827;
+                }
+
+                .ck-modal-body .ck-login-sent p:last-of-type {
+                    margin-bottom: 0;
+                    color: #6b7280;
+                    font-size: 0.875rem;
+                }
+
+                .ck-modal-body .ck-login-sent .ck-email-address {
+                    font-weight: 600;
+                    color: var(--ck-primary);
+                }
+
+                .ck-modal-body .ck-link-btn {
+                    margin-top: 20px;
+                    font-weight: 500;
+                }
+
+                /* Mobile responsive modal */
+                @media (max-width: 640px) {
+                    .ck-modal-content {
+                        max-width: 100%;
+                        width: calc(100% - 32px);
+                        max-height: calc(100vh - 32px);
+                        border-radius: 12px;
+                    }
+
+                    .ck-modal-header {
+                        padding: 24px 24px 20px;
+                    }
+
+                    .ck-modal-title {
+                        font-size: 1.375rem;
+                        line-height: 1.4;
+                    }
+
+                    .ck-modal-close {
+                        padding: 4px;
+                        margin-top: 0;
+                    }
+
+                    .ck-modal-close svg {
+                        width: 18px;
+                        height: 18px;
+                    }
+
+                    .ck-modal-body {
+                        padding: 24px;
+                    }
+
+                    .ck-modal-body .ck-form-group {
+                        margin-bottom: 20px;
+                    }
+
+                    .ck-modal-body .ck-form-group label {
+                        font-size: 0.8125rem;
+                        margin-bottom: 8px;
+                    }
+
+                    .ck-modal-body .ck-form-group input {
+                        padding: 11px 12px;
+                        font-size: 16px;
+                    }
+
+                    .ck-modal-body button.ck-btn,
+                    .ck-modal-body .ck-btn {
+                        padding: 11px 20px;
+                        font-size: 0.9375rem;
+                    }
+
+                    .ck-modal-body p {
+                        font-size: 0.8125rem;
+                        margin: 0 0 24px 0 !important;
+                    }
+
+                    .ck-modal-body .ck-login-sent {
+                        padding: 24px 16px;
+                    }
+
+                    .ck-modal-body .ck-login-sent .ck-email-icon {
+                        width: 48px;
+                        height: 48px;
+                        margin-bottom: 16px;
+                    }
+
+                    .ck-modal-body .ck-login-sent .ck-email-icon svg {
+                        width: 20px;
+                        height: 20px;
+                    }
+
+                    .ck-modal-body .ck-login-sent p strong {
+                        font-size: 1rem;
+                    }
+                }
+
+                @media (max-width: 380px) {
+                    .ck-modal-content {
+                        width: calc(100% - 24px);
+                        margin: 0 12px;
+                    }
+
+                    .ck-modal-header {
+                        padding: 20px 20px 16px;
+                    }
+
+                    .ck-modal-title {
+                        font-size: 1.25rem;
+                    }
+
+                    .ck-modal-body {
+                        padding: 20px;
+                    }
+                }
+
+                /* Landscape mobile optimization */
+                @media (max-height: 600px) and (orientation: landscape) {
+                    .ck-modal-content {
+                        max-height: calc(100vh - 16px);
+                        margin: 8px auto;
+                    }
+
+                    .ck-modal-header {
+                        padding: 20px 24px 16px;
+                    }
+
+                    .ck-modal-title {
+                        font-size: 1.25rem;
+                    }
+
+                    .ck-modal-body {
+                        padding: 20px 24px;
+                    }
+
+                    .ck-modal-body .ck-form-group {
+                        margin-bottom: 16px;
+                    }
+
+                    .ck-modal-body p {
+                        margin: 0 0 20px 0 !important;
+                    }
+                }
             `;
             document.head.appendChild(style);
         }
@@ -743,19 +1230,26 @@
                     case 'commentPosted':
                         this.state.loginSent = false;
                         this.state.authMode = 'guest';
+                        // Show confirmation for guest comments
+                        if (!this.state.user) {
+                            this.state.guestCommentSent = true;
+                        }
                         this.refreshComments();
                         break;
                     case 'authStateChanged':
                         this.state.user = event.data.user || null;
                         this.state.authLoading = false;
                         this.state.loginSent = false;
+                        this.state.guestCommentSent = false;
                         this.state.authMode = 'guest';
+                        this.hideLoginModal(); // Close modal on successful auth
                         this.render();
                         break;
                     case 'loginEmailSent':
                         this.state.loginSent = true;
                         this.state.loginEmail = event.data.email;
                         this.state.authLoading = false;
+                        this.updateModalBody(); // Update modal to show email sent message
                         this.render();
                         break;
                     case 'error':
@@ -976,7 +1470,7 @@
                     ${this.renderComments(commentTree)}
 
                     <div class="ck-footer">
-                        Powered by <a href="${this.config.apiBase}" target="_blank">CommentKit</a>
+                        Powered by <a href="https://commentkit.ankush.one" target="_blank">CommentKit</a>
                     </div>
                 </div>
             `;
@@ -1003,7 +1497,27 @@
         }
 
         renderForm() {
-            const { user, authMode, loginSent, loginEmail } = this.state;
+            const { user, authMode, loginSent, loginEmail, guestCommentSent } = this.state;
+
+            // If guest comment was sent, show confirmation
+            if (guestCommentSent && !user) {
+                return `
+                    <div class="ck-form">
+                        <div class="ck-login-sent">
+                            <div class="ck-email-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                </svg>
+                            </div>
+                            <p><strong>Comment submitted!</strong></p>
+                            <p>Your comment has been received and is awaiting approval.</p>
+                            <p>Site owners will review it before it appears publicly.</p>
+                            <button type="button" class="ck-link-btn" id="ck-dismiss-guest-message">Post another comment</button>
+                        </div>
+                    </div>
+                `;
+            }
 
             // If user is authenticated, show simplified form
             if (user) {
@@ -1322,6 +1836,7 @@
             if (guestModeBtn) {
                 guestModeBtn.addEventListener('click', () => {
                     this.state.authMode = 'guest';
+                    this.state.guestCommentSent = false;
                     this.render();
                 });
             }
@@ -1330,6 +1845,7 @@
             if (loginModeBtn) {
                 loginModeBtn.addEventListener('click', () => {
                     this.state.authMode = 'login';
+                    this.state.guestCommentSent = false;
                     this.render();
                 });
             }
@@ -1359,6 +1875,15 @@
                 });
             }
 
+            // Dismiss guest comment confirmation
+            const dismissGuestBtn = this.container.querySelector('#ck-dismiss-guest-message');
+            if (dismissGuestBtn) {
+                dismissGuestBtn.addEventListener('click', () => {
+                    this.state.guestCommentSent = false;
+                    this.render();
+                });
+            }
+
             // Logout button
             const logoutBtn = this.container.querySelector('#ck-logout');
             if (logoutBtn) {
@@ -1372,9 +1897,13 @@
             if (pageLikeBtn) {
                 pageLikeBtn.addEventListener('click', async () => {
                     if (!this.state.user) {
-                        // Redirect to login if not authenticated
-                        this.state.authMode = 'login';
-                        this.render();
+                        // Show toast and open login modal
+                        this.showToast('Sign in to like this page', {
+                            text: 'Sign in',
+                            callback: () => {
+                                this.showLoginModal();
+                            }
+                        });
                         return;
                     }
 
@@ -1424,9 +1953,13 @@
 
                 btn.addEventListener('click', async () => {
                     if (!this.state.user) {
-                        // Redirect to login if not authenticated
-                        this.state.authMode = 'login';
-                        this.render();
+                        // Show toast and open login modal
+                        this.showToast('Sign in to like comments', {
+                            text: 'Sign in',
+                            callback: () => {
+                                this.showLoginModal();
+                            }
+                        });
                         return;
                     }
 
@@ -1631,6 +2164,235 @@
             const array = new Uint8Array(32);
             crypto.getRandomValues(array);
             return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+        }
+
+        showToast(message, action = null) {
+            // Helper to dismiss a toast with animation
+            const dismissToast = (toastElement) => {
+                toastElement.classList.remove('show');
+                toastElement.classList.add('hide');
+                setTimeout(() => toastElement.remove(), 250);
+            };
+
+            // Remove any existing toast with animation
+            const existingToast = document.querySelector('.ck-toast');
+            if (existingToast) {
+                dismissToast(existingToast);
+            }
+
+            // Create toast element
+            const toast = document.createElement('div');
+            toast.className = 'ck-toast';
+
+            if (action) {
+                toast.innerHTML = `${this.escapeHtml(message)} <a href="#" class="ck-toast-action">${this.escapeHtml(action.text)}</a>`;
+            } else {
+                toast.textContent = message;
+            }
+
+            document.body.appendChild(toast);
+
+            // Handle action click
+            if (action) {
+                const actionLink = toast.querySelector('.ck-toast-action');
+                if (actionLink) {
+                    actionLink.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        dismissToast(toast);
+                        setTimeout(() => action.callback(), 250);
+                    });
+                }
+            }
+
+            // Trigger show animation
+            requestAnimationFrame(() => {
+                toast.classList.add('show');
+            });
+
+            // Auto-dismiss after 4 seconds
+            setTimeout(() => {
+                dismissToast(toast);
+            }, 4000);
+        }
+
+        showLoginModal() {
+            // Remove any existing modal
+            const existingModal = document.querySelector('.ck-modal-overlay');
+            if (existingModal) {
+                this.hideLoginModal();
+            }
+
+            // Create modal overlay
+            const modal = document.createElement('div');
+            modal.className = 'ck-modal-overlay';
+            modal.innerHTML = `
+                <div class="ck-modal-content">
+                    <div class="ck-modal-header">
+                        <h3 class="ck-modal-title">Sign in to CommentKit</h3>
+                        <button type="button" class="ck-modal-close">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="ck-modal-body">
+                        ${this.state.loginSent ? this.renderLoginSentMessage() : this.renderLoginModalForm()}
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+
+            // Close on overlay click
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    this.hideLoginModal();
+                }
+            });
+
+            // Close button
+            const closeBtn = modal.querySelector('.ck-modal-close');
+            closeBtn.addEventListener('click', () => {
+                this.hideLoginModal();
+            });
+
+            // Close on ESC key
+            const handleEscape = (e) => {
+                if (e.key === 'Escape') {
+                    this.hideLoginModal();
+                    document.removeEventListener('keydown', handleEscape);
+                }
+            };
+            document.addEventListener('keydown', handleEscape);
+
+            // Attach login form handler
+            const loginForm = modal.querySelector('#ck-modal-login-form');
+            if (loginForm) {
+                loginForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const formData = new FormData(loginForm);
+                    this.state.authLoading = true;
+                    this.updateModalBody();
+                    this.sendToIframe({
+                        action: 'login',
+                        email: formData.get('email'),
+                        redirectUrl: window.location.href,
+                    });
+                });
+            }
+
+            // Back button (if login sent)
+            const backBtn = modal.querySelector('#ck-modal-back');
+            if (backBtn) {
+                backBtn.addEventListener('click', () => {
+                    this.state.loginSent = false;
+                    this.updateModalBody();
+                });
+            }
+
+            // Trigger show animation
+            requestAnimationFrame(() => {
+                modal.classList.add('show');
+
+                // Focus email input after animation starts
+                setTimeout(() => {
+                    const emailInput = modal.querySelector('#ck-modal-email');
+                    if (emailInput) {
+                        emailInput.focus();
+                    }
+                }, 150);
+            });
+
+            // Prevent body scroll
+            document.body.style.overflow = 'hidden';
+        }
+
+        hideLoginModal() {
+            const modal = document.querySelector('.ck-modal-overlay');
+            if (modal) {
+                modal.classList.remove('show');
+                modal.classList.add('hide');
+                setTimeout(() => {
+                    modal.remove();
+                    document.body.style.overflow = '';
+                }, 200);
+            }
+        }
+
+        updateModalBody() {
+            const modal = document.querySelector('.ck-modal-overlay');
+            if (!modal) return;
+
+            const modalBody = modal.querySelector('.ck-modal-body');
+            if (this.state.loginSent) {
+                modalBody.innerHTML = this.renderLoginSentMessage();
+                const backBtn = modalBody.querySelector('#ck-modal-back');
+                if (backBtn) {
+                    backBtn.addEventListener('click', () => {
+                        this.state.loginSent = false;
+                        this.updateModalBody();
+                    });
+                }
+            } else {
+                modalBody.innerHTML = this.renderLoginModalForm();
+                const loginForm = modalBody.querySelector('#ck-modal-login-form');
+                if (loginForm) {
+                    loginForm.addEventListener('submit', (e) => {
+                        e.preventDefault();
+                        const formData = new FormData(loginForm);
+                        this.state.authLoading = true;
+                        this.updateModalBody();
+                        this.sendToIframe({
+                            action: 'login',
+                            email: formData.get('email'),
+                            redirectUrl: window.location.href,
+                        });
+                    });
+
+                    // Focus email input when switching back to form
+                    setTimeout(() => {
+                        const emailInput = loginForm.querySelector('#ck-modal-email');
+                        if (emailInput) {
+                            emailInput.focus();
+                        }
+                    }, 0);
+                }
+            }
+        }
+
+        renderLoginModalForm() {
+            return `
+                <form id="ck-modal-login-form">
+                    <div class="ck-form-group">
+                        <label for="ck-modal-email">Email address</label>
+                        <input type="email" id="ck-modal-email" name="email" required placeholder="your@email.com" autocomplete="email">
+                    </div>
+                    <p style="font-size: 0.875rem; color: #6b7280; margin: 0 0 28px 0; line-height: 1.6;">
+                        We'll send you a magic link to sign in. No password needed.
+                    </p>
+                    <button type="submit" class="ck-btn ck-btn-primary" ${this.state.authLoading ? 'disabled' : ''}>
+                        ${this.state.authLoading ? 'Sending...' : 'Send Login Link'}
+                    </button>
+                </form>
+            `;
+        }
+
+        renderLoginSentMessage() {
+            return `
+                <div class="ck-login-sent">
+                    <div class="ck-email-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
+                        </svg>
+                    </div>
+                    <p><strong>Check your email</strong></p>
+                    <p>We sent a login link to <span class="ck-email-address">${this.escapeHtml(this.state.loginEmail)}</span></p>
+                    <p>Click the link in the email to sign in.</p>
+                    <button type="button" class="ck-link-btn" id="ck-modal-back">Use a different email</button>
+                </div>
+            `;
         }
     }
 
