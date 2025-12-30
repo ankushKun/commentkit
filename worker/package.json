@@ -6,7 +6,7 @@
     "dev": "wrangler dev --env dev",
     "deploy": "wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply commentkit-db --local --env dev",
-    "db:migrate": "wrangler d1 migrations apply commentkit-db",
+    "db:migrate": "wrangler d1 migrations apply commentkit-db --remote",
     "db:execute": "wrangler d1 execute commentkit-db --remote --command",
     "db:execute:local": "wrangler d1 execute commentkit-db --local --env dev --command",
     "typecheck": "tsc --noEmit",

@@ -16,7 +16,7 @@
         // Where the widget iframe is served from (frontend)
         baseUrl: scriptOrigin || window.COMMENTKIT_BASE_URL || '',
         // Where API calls go (backend) - can be configured separately
-        apiUrl: currentScript?.getAttribute('data-api-url') || window.COMMENTKIT_API_URL || scriptOrigin || '',
+        apiUrl: currentScript?.getAttribute('data-api-url') || window.COMMENTKIT_API_URL || 'https://commentkit.ankushkun.workers.dev' || '',
     };
 
     // Check if current page is localhost/development

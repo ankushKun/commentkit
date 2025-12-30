@@ -10,7 +10,7 @@ database_id = "cce89088-e2cf-4b79-883d-22f5602473c6"
 
 [vars]
 ENVIRONMENT = "production"
-BASE_URL = "https://your-worker.your-subdomain.workers.dev"
+BASE_URL = "https://commentkit.ankushkun.workers.dev"
 # FRONTEND_URL = "http://localhost:3000"
 
 # Dev environment overrides
