@@ -2,6 +2,7 @@ import { serve } from "bun";
 import { join } from "path";
 import index from './index.html'
 import widget from './widget.html'
+import docs from './docs.html'
 
 const publicDir = join(import.meta.dir, "../public");
 
@@ -9,6 +10,7 @@ const server = serve({
   routes: {
     "/": index,
     "/widget": widget,
+    "/docs": docs,
   },
   async fetch(req) {
     const url = new URL(req.url);
@@ -56,4 +58,5 @@ const server = serve({
 console.log(`Server running at ${server.url}`);
 console.log(`- Dashboard: ${server.url}`);
 console.log(`- Widget: ${server.url}widget`);
+console.log(`- Docs: ${server.url}docs`);
 console.log(`- Embed script: ${server.url}bundle.js`);
