@@ -13,6 +13,20 @@ const server = serve({
   async fetch(req) {
     const url = new URL(req.url);
 
+    // Serve bundle.js from src directory
+    if (url.pathname === "/bundle.js") {
+      const bundlePath = join(import.meta.dir, "bundle.js");
+      const file = Bun.file(bundlePath);
+      if (await file.exists()) {
+        return new Response(file, {
+          headers: {
+            "Content-Type": "application/javascript",
+            "Cache-Control": "no-cache",
+          },
+        });
+      }
+    }
+
     // Serve static files from public folder
     const filePath = join(publicDir, url.pathname);
     try {
@@ -42,4 +56,4 @@ const server = serve({
 console.log(`Server running at ${server.url}`);
 console.log(`- Dashboard: ${server.url}`);
 console.log(`- Widget: ${server.url}widget`);
-console.log(`- Embed script: ${server.url}commentkit.js`);
+console.log(`- Embed script: ${server.url}bundle.js`);

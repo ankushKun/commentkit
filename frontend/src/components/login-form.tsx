@@ -258,7 +258,7 @@ export function LoginForm() {
                                 <span className="text-pink-400">{'<script'}</span>
                                 <span className="text-sky-300">{' src'}</span>
                                 <span className="text-slate-300">{'='}</span>
-                                <span className="text-amber-300">{'"https://your-domain/commentkit.js"'}</span>
+                                <span className="text-amber-300">{"\"https://commentkit.ankush.one/bundle.js\""}</span>
                                 <span className="text-pink-400">{'></script>'}</span>
                                 {'\n'}
                                 <span className="text-pink-400">{'<div'}</span>

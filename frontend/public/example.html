@@ -39,7 +39,7 @@
             margin-bottom: 20px;
         }
     </style>
-    <script src="/commentkit.js" data-api-url="http://localhost:8787"></script>
+    <script src="/bundle.js" data-api-url="http://localhost:8787"></script>
 </head>
 
 <body>
@@ -84,21 +84,7 @@
             ALTERNATIVE: Use a custom page identifier
             Useful when the URL changes but you want to keep the same comments
         -->
-        <!-- <script src="/commentkit.js" data-page-id="my-first-blog-post" data-api-url="http://localhost:8787"></script> -->
-
-        <!--
-            ADVANCED: Use configuration function for more control
-        -->
-        <!--
-        <script>
-            var commentkit_config = function () {
-                this.page.identifier = 'my-custom-page-id';
-                this.page.title = 'My Custom Page Title';
-                this.page.url = 'https://example.com/custom-url';
-            };
-        </script>
-        <script src="/commentkit.js"></script>
-        -->
+        <!-- <script src="/bundle.js" data-page-id="my-first-blog-post" data-api-url="http://localhost:8787"></script> -->
     </div>
 </body>
 

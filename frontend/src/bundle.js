@@ -12,11 +12,17 @@
 
     const currentScript = document.currentScript;
     const scriptOrigin = currentScript ? new URL(currentScript.src).origin : '';
+
+    // Check if script is served from localhost (development mode)
+    const isLocalDev = scriptOrigin.includes('localhost') || scriptOrigin.includes('127.0.0.1');
+
     const CONFIG = {
         // Where the widget iframe is served from (frontend)
         baseUrl: scriptOrigin || window.COMMENTKIT_BASE_URL || '',
-        // Where API calls go (backend) - can be configured separately
-        apiUrl: currentScript?.getAttribute('data-api-url') || window.COMMENTKIT_API_URL || 'https://commentkit.ankushkun.workers.dev' || '',
+        // Where API calls go (backend) - defaults to production unless in local dev
+        apiUrl: currentScript?.getAttribute('data-api-url')
+            || window.COMMENTKIT_API_URL
+            || (isLocalDev ? 'http://localhost:8787' : 'https://commentkit.ankushkun.workers.dev'),
     };
 
     // Check if current page is localhost/development

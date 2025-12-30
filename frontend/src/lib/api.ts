@@ -1,6 +1,20 @@
 // API client for Thread Engine
 
-const API_BASE = 'http://localhost:8787';
+// Detect environment and set API base URL accordingly
+const isLocalhost = () => {
+    if (typeof window === 'undefined') return false;
+    const hostname = window.location.hostname;
+    return hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname === '0.0.0.0' ||
+        hostname.startsWith('192.168.') ||
+        hostname.startsWith('10.') ||
+        hostname.endsWith('.local');
+};
+
+const API_BASE = isLocalhost()
+    ? 'http://localhost:8787'  // Local development
+    : 'https://commentkit.ankushkun.workers.dev';  // Production
 
 interface ApiResponse<T> {
     data: T | null;

@@ -467,7 +467,7 @@ export function SitesTab({ autoShowCreate = false }: SitesTabProps) {
                                                 <p className="text-xs font-medium text-slate-500 mb-2">1. Add the script</p>
                                                 <div className="relative">
                                                     <pre className="bg-slate-900 text-slate-100 px-4 py-3 rounded-lg text-sm font-mono overflow-x-auto">
-                                                        <code>{`<script src="${window.location.origin}/commentkit.js"></script>`}</code>
+                                                        <code>{`<script src="${window.location.origin}/bundle.js"></script>`}</code>
                                                     </pre>
                                                     <Button
                                                         variant="ghost"
@@ -478,7 +478,7 @@ export function SitesTab({ autoShowCreate = false }: SitesTabProps) {
                                                                 ? "text-green-400 hover:text-green-400"
                                                                 : "text-slate-400 hover:text-white hover:bg-slate-700"
                                                         )}
-                                                        onClick={() => copyToClipboard(`<script src="${window.location.origin}/commentkit.js"></script>`, 'detail-script')}
+                                                        onClick={() => copyToClipboard(`<script src="${window.location.origin}/bundle.js"></script>`, 'detail-script')}
                                                     >
                                                         {copiedItem === 'detail-script' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                                                     </Button>
@@ -885,7 +885,7 @@ export function SitesTab({ autoShowCreate = false }: SitesTabProps) {
                                 </p>
                                 <div className="relative">
                                     <pre className="bg-slate-900 text-slate-100 px-4 py-3 rounded-lg text-sm font-mono overflow-x-auto break-all whitespace-pre-wrap">
-                                        <code>{`<script src="${window.location.origin}/commentkit.js"></script>`}</code>
+                                        <code>{`<script src="${window.location.origin}/bundle.js"></script>`}</code>
                                     </pre>
                                     <Button
                                         variant="ghost"
@@ -896,7 +896,7 @@ export function SitesTab({ autoShowCreate = false }: SitesTabProps) {
                                                 ? "text-green-400 hover:text-green-400"
                                                 : "text-slate-400 hover:text-white hover:bg-slate-700"
                                         )}
-                                        onClick={() => copyToClipboard(`<script src="${window.location.origin}/commentkit.js"></script>`, 'script')}
+                                        onClick={() => copyToClipboard(`<script src="${window.location.origin}/bundle.js"></script>`, 'script')}
                                     >
                                         {copiedItem === 'script' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                                     </Button>
