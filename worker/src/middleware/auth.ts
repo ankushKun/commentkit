@@ -70,7 +70,7 @@ export async function cors(c: Context, next: Next) {
             headers: {
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, X-CSRF-Token',
                 'Access-Control-Max-Age': '86400',
             },
         });
@@ -81,7 +81,7 @@ export async function cors(c: Context, next: Next) {
     // Add CORS headers to response
     c.res.headers.set('Access-Control-Allow-Origin', '*');
     c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
+    c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key, X-CSRF-Token');
 }
 
 // Export hash function for use in auth routes
