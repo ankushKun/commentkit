@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { Database } from '../db';
 import { getAuthUser, hashToken } from '../middleware';
 import type { Env } from '../types';
+import { sendMagicLinkEmail } from '../utils/email';
 
 const auth = new Hono<{ Bindings: Env }>();
 
@@ -61,10 +62,23 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
     // Log for development
     console.log(`🔗 Magic link for ${email}: ${verifyUrl}`);
 
-    // TODO: Send email via Resend in production
-    // if (c.env.RESEND_API_KEY) {
-    //   await sendMagicLinkEmail(email, verifyUrl, c.env.RESEND_API_KEY);
-    // }
+    // Send email via Resend if API key is configured
+    if (c.env.RESEND_API_KEY) {
+        const result = await sendMagicLinkEmail(email, verifyUrl, c.env.RESEND_API_KEY);
+        if (!result.success) {
+            console.error('Failed to send email:', result.error);
+            return c.json(
+                {
+                    error: 'Failed to send magic link email. Please try again.',
+                    details: result.error,
+                },
+                500
+            );
+        }
+        console.log(`✅ Magic link email sent to ${email}`);
+    } else {
+        console.warn('⚠️ RESEND_API_KEY not configured - email not sent (check console for magic link)');
+    }
 
     return c.json({ message: 'Magic link sent! Check your email.' });
 });

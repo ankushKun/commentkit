@@ -15,6 +15,7 @@
   "dependencies": {
     "@hono/zod-validator": "^0.7.6",
     "hono": "^4.11.3",
+    "resend": "^6.6.0",
     "zod": "^4.2.1"
   },
   "devDependencies": {
