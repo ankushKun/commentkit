@@ -284,6 +284,8 @@ export interface User {
     email_hash: string | null;
     display_name: string | null;
     is_superadmin: boolean;
+    created_at: string;
+    updated_at: string;
 }
 
 export interface GlobalStats {

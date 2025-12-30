@@ -116,6 +116,8 @@ auth.get('/verify', async (c) => {
             email_hash: user.email_hash,
             display_name: user.display_name,
             is_superadmin: user.is_superadmin === 1,
+            created_at: user.created_at,
+            updated_at: user.updated_at,
         },
     });
 });
@@ -135,6 +137,8 @@ auth.get('/me', async (c) => {
         email_hash: user.email_hash,
         display_name: user.display_name,
         is_superadmin: user.is_superadmin,
+        created_at: user.created_at,
+        updated_at: user.updated_at,
     };
 
     if (!includeBootstrap) {
@@ -190,8 +194,11 @@ auth.patch('/profile', zValidator('json', updateProfileSchema), async (c) => {
     return c.json({
         id: user.id,
         email: user.email,
+        email_hash: user.email_hash,
         display_name: body.display_name ?? user.display_name,
         is_superadmin: user.is_superadmin,
+        created_at: user.created_at,
+        updated_at: user.updated_at,
     });
 });
 

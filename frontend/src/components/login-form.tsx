@@ -13,7 +13,8 @@ import {
     Mail,
     CheckCircle2,
     ArrowRight,
-    Globe
+    Globe,
+    BookOpen
 } from 'lucide-react';
 import logo from "../../icon.png"
 
@@ -69,7 +70,7 @@ export function LoginForm() {
     };
 
     const loginCard = sent ? (
-        <Card className="w-full border-slate-200 shadow-lg">
+        <Card className="w-full border-slate-200 shadow-lg py-4">
             <CardHeader className="text-center pb-2">
                 <div className="h-16 w-16 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-4">
                     <Mail className="h-8 w-8 text-green-600" />
@@ -101,7 +102,7 @@ export function LoginForm() {
             </CardContent>
         </Card>
     ) : (
-        <Card className="w-full border-slate-200 shadow-lg">
+        <Card className="w-full border-slate-200 shadow-lg py-4">
             <CardHeader className="text-center pb-4">
                 {/* <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/25">
                     <MessageSquare className="h-7 w-7 text-white" />
@@ -182,13 +183,30 @@ export function LoginForm() {
                     {loginCard}
 
                     {/* Social Proof / Trust */}
-                    <div className="mt-4 sm:mt-6 text-center">
+                    <div className="mt-2 mb-4 text-center">
                         <div className="flex items-center justify-center gap-1 text-slate-400">
                             <CheckCircle2 className="h-4 w-4 text-green-500" />
                             <span className="text-sm">Free to get started</span>
                         </div>
                     </div>
+                    {/* Example CTA */}
+                    <a href="https://commentkit.ankush.one/example" target="_blank" rel="noopener noreferrer">
+                        <div className="text-center bg-white p-4 py-2.5 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between gap-4">
+                            <div className="text-left">
+                                <h3 className="text-slate-900 font-semibold">See it in action</h3>
+                                <p className="text-slate-500 text-sm">Check out our live demo to see how comment threads work.</p>
+                            </div>
+                            <a
+                                href="https://commentkit.ankush.one/example"
+                                target="_blank"
+                                className=" inline-flex aspect-square h-full items-center gap-2 bg-blue-50 text-blue-600 hover:bg-blue-100 px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+                            >
+                                <ArrowRight className="h-5 w-5" />
+                            </a>
+                        </div>
+                    </a>
                 </div>
+
 
                 {/* Features - Left Side */}
                 <div className="lg:col-span-3 lg:order-1 space-y-6 md:space-y-8">
@@ -217,7 +235,7 @@ export function LoginForm() {
                     </div>
 
                     {/* How it Works */}
-                    <div className="bg-white rounded-2xl border border-slate-100 p-4 sm:p-6 shadow-sm">
+                    {/* <div className="bg-white rounded-2xl border border-slate-100 p-4 sm:p-6 shadow-sm">
                         <h2 className="text-base sm:text-lg font-bold text-slate-800 mb-4 sm:mb-5 flex items-center gap-2">
                             <Globe className="h-5 w-5 text-blue-600" />
                             Get started in minutes
@@ -239,7 +257,7 @@ export function LoginForm() {
                                 description="Moderate comments, view activity, and keep your community healthy."
                             />
                         </div>
-                    </div>
+                    </div> */}
 
                     {/* Code Preview */}
                     <div className="bg-slate-900 rounded-xl p-3 sm:p-5 shadow-lg overflow-hidden">
@@ -274,9 +292,19 @@ export function LoginForm() {
 
             {/* Footer */}
             <div className="mt-12 md:mt-16 pt-6 md:pt-8 border-t border-slate-200 text-center">
-                <p className="text-xs sm:text-sm text-slate-400">
+                <p className="text-xs sm:text-sm text-slate-400 mb-2">
                     Built with Cloudflare Workers, D1, and Hono
                 </p>
+                <div className="flex items-center justify-center gap-4 text-sm font-medium">
+                    <a href="/docs" target="_blank" className="text-slate-500 hover:text-blue-600 flex items-center gap-1 transition-colors">
+                        <BookOpen className="h-4 w-4" />
+                        Documentation
+                    </a>
+                    <a href="https://commentkit.ankush.one/example" target="_blank" className="text-slate-500 hover:text-blue-600 flex items-center gap-1 transition-colors">
+                        <Globe className="h-4 w-4" />
+                        View Example
+                    </a>
+                </div>
             </div>
         </div>
     );

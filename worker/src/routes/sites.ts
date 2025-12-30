@@ -17,8 +17,8 @@ function generateApiKey(): string {
 
 // Check if domain is localhost or IP address
 function isLocalhostOrIP(domain: string): boolean {
-    // Localhost variations
-    if (domain === 'localhost' || domain.startsWith('localhost:')) return true;
+    // Localhost variations (exact match, port, or subdomain)
+    if (domain === 'localhost' || domain.startsWith('localhost:') || domain.endsWith('.localhost')) return true;
     if (domain === '127.0.0.1' || domain.startsWith('127.0.0.1:')) return true;
     if (domain === '0.0.0.0' || domain.startsWith('0.0.0.0:')) return true;
 

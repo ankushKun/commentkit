@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { sites, comments as commentsApi, type SitePreview, type SiteDetailWithData, type Comment, type VerificationInfo } from '@/lib/api';
+import { sites, comments as commentsApi, type SitePreview, type SiteDetailWithData, type Comment, type VerificationInfo, type PageWithStats } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,9 +43,14 @@ interface SitesTabProps {
     autoShowCreate?: boolean;
 }
 
+// Extended type to include pages
+type SiteDetailWithPages = SiteDetailWithData & {
+    pages?: PageWithStats[];
+};
+
 export function SitesTab({ autoShowCreate = false }: SitesTabProps) {
     const [siteList, setSiteList] = useState<SitePreview[]>([]);
-    const [selectedSite, setSelectedSite] = useState<SiteDetailWithData | null>(null);
+    const [selectedSite, setSelectedSite] = useState<SiteDetailWithPages | null>(null);
     const [loading, setLoading] = useState(true);
     const [showCreateForm, setShowCreateForm] = useState(autoShowCreate);
 
@@ -106,12 +111,19 @@ export function SitesTab({ autoShowCreate = false }: SitesTabProps) {
     }, [autoShowCreate]);
 
     const loadSiteDetails = async (siteId: number, status?: string) => {
-        const { data } = await sites.get(siteId, {
-            comment_limit: 50,
-            comment_status: status === 'all' ? undefined : status,
-        });
-        if (data) {
-            setSelectedSite(data);
+        const [siteData, pagesData] = await Promise.all([
+            sites.get(siteId, {
+                comment_limit: 50,
+                comment_status: status === 'all' ? undefined : status,
+            }),
+            sites.getPages(siteId, { limit: 100, sort: 'latest_comment' })
+        ]);
+
+        if (siteData.data) {
+            setSelectedSite({
+                ...siteData.data,
+                pages: pagesData.data?.pages || []
+            });
         }
     };
 
@@ -558,15 +570,62 @@ export function SitesTab({ autoShowCreate = false }: SitesTabProps) {
 
                 {siteDetailTab === 'pages' && (
                     <div className="space-y-4">
-                        <Card className="border-slate-200">
-                            <CardContent className="p-8 text-center">
-                                <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                                <h3 className="text-lg font-medium text-slate-800 mb-1">Pages</h3>
-                                <p className="text-slate-500 text-sm">
-                                    Pages are automatically created when visitors leave comments. You'll see them listed here.
-                                </p>
-                            </CardContent>
-                        </Card>
+                        {(!selectedSite.pages || selectedSite.pages.length === 0) ? (
+                            <Card className="border-slate-200">
+                                <CardContent className="p-8 text-center">
+                                    <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+                                    <h3 className="text-lg font-medium text-slate-800 mb-1">No Pages Yet</h3>
+                                    <p className="text-slate-500 text-sm">
+                                        Pages are automatically created when visitors leave comments. You'll see them listed here.
+                                    </p>
+                                </CardContent>
+                            </Card>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {selectedSite.pages.map((page) => (
+                                    <Card key={page.id} className="hover:shadow-md transition-all border-slate-200 group">
+                                        <CardContent className="p-4">
+                                            <div className="space-y-3">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <h3 className="font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
+                                                        {page.title || page.slug}
+                                                    </h3>
+                                                    {page.url && (
+                                                        <a
+                                                            href={page.url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="shrink-0 text-slate-400 hover:text-blue-600 transition-colors"
+                                                        >
+                                                            <ExternalLink className="h-4 w-4" />
+                                                        </a>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex items-center gap-4 text-sm text-slate-600">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <MessageSquare className="h-4 w-4" />
+                                                        <span>{page.comment_count} comments</span>
+                                                    </div>
+                                                    {(page.pending_count ?? 0) > 0 && (
+                                                        <div className="flex items-center gap-1.5 text-orange-600">
+                                                            <AlertCircle className="h-4 w-4" />
+                                                            <span>{page.pending_count} pending</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {page.latest_comment_at && (
+                                                    <p className="text-xs text-slate-500">
+                                                        Last activity {new Date(page.latest_comment_at).toLocaleDateString()}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
 

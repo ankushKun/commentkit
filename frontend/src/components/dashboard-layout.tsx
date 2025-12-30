@@ -1,7 +1,6 @@
 import { useAuth } from '@/lib/auth-context';
 import { useSite } from '@/lib/site-context';
 import { Button } from '@/components/ui/button';
-import { SiteSwitcher } from '@/components/site-switcher';
 import { Avatar } from '@/components/ui/avatar';
 import {
     Home,
@@ -20,6 +19,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { BookOpen } from "lucide-react";
 
 export type TabType = 'overview' | 'sites' | 'settings';
 
@@ -87,9 +87,19 @@ export function DashboardLayout({ children, activeTab, onTabChange }: DashboardL
 
                 {/* Right Section */}
                 <div className="flex items-center gap-4">
-                    {/* Site Switcher */}
-                    <div className="hidden md:block min-w-[200px]">
-                        <SiteSwitcher />
+
+                    {/* Resources Links */}
+                    <div className="hidden lg:flex items-center gap-2">
+                        <Button
+                            variant="ghost"
+                            className="text-slate-600 gap-2 h-9 px-3 text-sm hover:text-slate-900"
+                            asChild
+                        >
+                            <a href="/docs" target="_blank">
+                                <BookOpen className="h-4 w-4" />
+                                Docs
+                            </a>
+                        </Button>
                     </div>
 
                     <div className="h-6 w-px bg-slate-200" />

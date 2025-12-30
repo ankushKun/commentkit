@@ -11,6 +11,7 @@ interface CommentCardProps {
     showPage?: boolean;
     pageTitle?: string | null;
     pageSlug?: string;
+    siteName?: string;
     selected?: boolean;
     onSelect?: (id: number) => void;
     onApprove?: (id: number) => void;
@@ -25,6 +26,7 @@ export function CommentCard({
     showPage = false,
     pageTitle,
     pageSlug,
+    siteName,
     selected = false,
     onSelect,
     onApprove,
@@ -47,7 +49,7 @@ export function CommentCard({
             "transition-all hover:shadow-md border-slate-200",
             selected && "ring-2 ring-blue-500 ring-offset-2"
         )}>
-            <CardContent className="p-5">
+            <CardContent className="p-4">
                 <div className="flex gap-4">
                     {/* Selection Checkbox */}
                     {onSelect && (
@@ -104,6 +106,14 @@ export function CommentCard({
                                     {pageTitle || pageSlug}
                                     <ExternalLink className="h-3 w-3" />
                                 </a>
+                            </div>
+                        )}
+
+                        {/* Site Name Badge (if enabled) */}
+                        {siteName && (
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 w-fit">
+                                <span className="font-semibold">Site:</span>
+                                <span>{siteName}</span>
                             </div>
                         )}
 

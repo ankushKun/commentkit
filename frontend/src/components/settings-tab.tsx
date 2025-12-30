@@ -42,7 +42,7 @@ export function SettingsTab() {
             </div>
 
             {/* Profile Section */}
-            <Card className="border-slate-200">
+            <Card className="border-slate-200 py-4">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <User className="h-5 w-5" />
@@ -137,7 +137,7 @@ export function SettingsTab() {
             </Card>
 
             {/* Account Info */}
-            <Card className="border-slate-200">
+            <Card className="border-slate-200 py-4">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <Mail className="h-5 w-5" />
@@ -158,7 +158,14 @@ export function SettingsTab() {
                         <div>
                             <p className="font-medium text-slate-900">Member Since</p>
                             <p className="text-slate-600 mt-1">
-                                {user?.email ? 'Active' : 'Unknown'}
+                                {user?.created_at}
+                                {user?.created_at
+                                    ? new Date(user.created_at).toLocaleDateString('en-US', {
+                                        year: 'numeric',
+                                        month: 'long',
+                                        day: 'numeric'
+                                    })
+                                    : 'Unknown'}
                             </p>
                         </div>
                     </div>
