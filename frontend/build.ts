@@ -125,22 +125,41 @@ const entrypoints = [
 
 console.log(`📄 Found ${entrypoints.length} entrypoint${entrypoints.length === 1 ? "" : "s"} to process\n`);
 
-const result = await Bun.build({
-  entrypoints,
-  outdir,
-  plugins: [plugin],
-  minify: true,
-  target: "browser",
-  sourcemap: "linked",
-  define: {
-    "process.env.NODE_ENV": JSON.stringify("production"),
-  },
-  ...cliConfig,
-});
+let allOutputs: any[] = [];
+
+// Build each entrypoint separately to avoid "Multiple files share the same output path" error
+// caused by shared assets (like CSS) trying to be written simultaneously by the bundler.
+for (const entrypoint of entrypoints) {
+  const result = await Bun.build({
+    entrypoints: [entrypoint],
+    outdir,
+    plugins: [plugin],
+    minify: true,
+    target: "browser",
+    sourcemap: "linked",
+    define: {
+      "process.env.NODE_ENV": JSON.stringify("production"),
+    },
+    ...cliConfig,
+  });
+
+  if (!result.success) {
+    console.error(`❌ Build failed for ${path.relative(process.cwd(), entrypoint)}`);
+    for (const message of result.logs) {
+      console.error(message);
+    }
+    process.exit(1);
+  }
+
+  allOutputs = [...allOutputs, ...result.outputs];
+}
 
 const end = performance.now();
 
-const outputTable = result.outputs.map(output => ({
+// De-duplicate outputs for the summary table
+const uniqueOutputs = Array.from(new Map(allOutputs.map(o => [o.path, o])).values());
+
+const outputTable = uniqueOutputs.map(output => ({
   File: path.relative(process.cwd(), output.path),
   Type: output.kind,
   Size: formatFileSize(output.size),
