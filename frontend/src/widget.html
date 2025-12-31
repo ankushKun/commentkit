@@ -5,6 +5,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CommentKit Bridge</title>
+    <!-- Content Security Policy for XSS protection -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self';
+        script-src 'self' 'unsafe-inline';
+        style-src 'self' 'unsafe-inline';
+        connect-src *;
+        frame-ancestors *;
+        img-src 'self' data:;
+        form-action 'none';
+        base-uri 'self';
+    ">
+    <!-- Prevent MIME sniffing -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
 </head>
 
 <body>
@@ -26,65 +39,34 @@
             // CSRF token must be provided for mutation requests
             const csrfToken = params.get('csrfToken') || '';
 
+            // Signed origin token - proves the actual page origin (anti-spoofing)
+            const originToken = params.get('originToken') || '';
+
             const CONFIG = {
                 apiBase: apiBase,
                 domain: params.get('domain') || '',
                 pageId: params.get('pageId') || '',
                 parentOrigin: parentOrigin,
-                csrfToken: csrfToken
+                csrfToken: csrfToken,
+                originToken: originToken
             };
 
             console.log('[CommentKit Bridge] Initialized with:', CONFIG);
 
-            // Session management - aligned with main app
-            const AUTH_TOKEN_KEY = 'auth_token';
+            // Session management - now uses HttpOnly cookies (set by server, not accessible to JS)
+            // This is more secure than localStorage as tokens can't be stolen via XSS
             let currentUser = null;
 
-            function getAuthToken() {
-                try {
-                    return localStorage.getItem(AUTH_TOKEN_KEY);
-                } catch (e) {
-                    return null;
-                }
-            }
-
-            function setAuthToken(token) {
-                try {
-                    if (token) {
-                        localStorage.setItem(AUTH_TOKEN_KEY, token);
-                    } else {
-                        localStorage.removeItem(AUTH_TOKEN_KEY);
-                    }
-                } catch (e) {
-                    console.error('[CommentKit Bridge] Failed to save auth token:', e);
-                }
-            }
-
-            function getAuthHeaders() {
-                const token = getAuthToken();
-                const headers = { 'Content-Type': 'application/json' };
-                if (token) {
-                    headers['Authorization'] = `Bearer ${token}`;
-                }
-                return headers;
-            }
-
-            // Check authentication status
+            // Check authentication status by calling the server
+            // The server will read the HttpOnly cookie automatically
             async function checkAuth() {
-                const token = getAuthToken();
-                if (!token) {
-                    currentUser = null;
-                    return null;
-                }
-
                 try {
                     const user = await apiCall('/api/v1/auth/me');
                     currentUser = user;
                     return user;
                 } catch (e) {
-                    // Token invalid or expired
+                    // Not authenticated or cookie expired
                     console.log('[CommentKit Bridge] Auth check failed:', e.message);
-                    setAuthToken(null);
                     currentUser = null;
                     return null;
                 }
@@ -99,14 +81,23 @@
                 }, CONFIG.parentOrigin);
             }
 
-            // API helper
+            // API helper - uses HttpOnly cookies for authentication (more secure than localStorage)
             async function apiCall(path, options = {}) {
                 const url = CONFIG.apiBase + path;
-                const headers = getAuthHeaders();
+                const headers = {
+                    'Content-Type': 'application/json',
+                    // Always include CSRF token for mutation requests
+                    'X-CSRF-Token': CONFIG.csrfToken,
+                    // Include signed origin token for anti-spoofing protection
+                    // This token is cryptographically signed and proves the actual page origin
+                    'X-Origin-Token': CONFIG.originToken
+                };
 
                 const response = await fetch(url, {
                     ...options,
-                    headers: { ...headers, ...options.headers }
+                    headers: { ...headers, ...options.headers },
+                    // Include credentials (cookies) for cross-origin requests
+                    credentials: 'include'
                 });
 
                 // Handle non-JSON responses gracefully
@@ -236,11 +227,10 @@
                         }
 
                         case 'verifyToken': {
-                            // Verify magic link token
+                            // Verify magic link token - server sets HttpOnly cookie automatically
                             try {
                                 const result = await apiCall(`/api/v1/auth/verify?token=${encodeURIComponent(message.token)}`);
-                                if (result.token) {
-                                    setAuthToken(result.token);
+                                if (result.user) {
                                     currentUser = result.user;
                                     sendAuthState();
                                 }
@@ -256,13 +246,11 @@
 
                         case 'logout': {
                             try {
-                                if (getAuthToken()) {
-                                    await apiCall('/api/v1/auth/logout', { method: 'POST' });
-                                }
+                                // Call logout API - server will clear HttpOnly cookie
+                                await apiCall('/api/v1/auth/logout', { method: 'POST' });
                             } catch (e) {
                                 // Ignore logout errors
                             }
-                            setAuthToken(null);
                             currentUser = null;
                             sendAuthState();
                             break;

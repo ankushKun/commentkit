@@ -122,6 +122,10 @@ export interface Env {
     ENVIRONMENT: string;
     BASE_URL: string;
     FRONTEND_URL?: string;
+    ALLOWED_ORIGINS?: string;
+    // Privacy settings
+    COLLECT_IP_ADDRESS?: string;  // 'true' or 'false' (default: 'false')
+    COLLECT_USER_AGENT?: string;  // 'true' or 'false' (default: 'false')
 }
 
 // Auth context

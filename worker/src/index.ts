@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { cors } from './middleware';
+import { cors, securityHeaders, validateCsrf } from './middleware';
 import { auth, comments, likes, sites, superadmin, widget } from './routes';
 import type { Env } from './types';
 
@@ -7,6 +7,12 @@ const app = new Hono<{ Bindings: Env }>();
 
 // CORS middleware
 app.use('*', cors);
+
+// Security headers middleware (CSP, X-Content-Type-Options, etc.)
+app.use('*', securityHeaders);
+
+// CSRF validation middleware (after CORS to ensure origin headers are checked)
+app.use('*', validateCsrf);
 
 // Health check
 app.get('/health', (c) => {

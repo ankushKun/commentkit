@@ -101,6 +101,7 @@
             this.commentMap = new Map();  // Store comment data by ID for quick access
             this.scrollAnchor = null;  // Element to anchor scroll position to
             this.isRefreshing = false;  // Track if we're refreshing vs initial load
+            this.originToken = null;    // Signed token proving page origin
 
             this.init();
         }
@@ -108,33 +109,44 @@
         async init() {
             this.injectStyles();
 
-            // If not on localhost, verify the site is registered and verified
-            if (!this.config.isLocalhost) {
-                try {
-                    const verifyResponse = await fetch(`${this.config.apiBase}/api/v1/widget/verify-site?domain=${encodeURIComponent(this.config.domain)}`);
-                    const verifyData = await verifyResponse.json();
+            // Call /widget/init to get a signed origin token
+            // This request's Origin header is set by the browser and cannot be spoofed
+            // The server verifies the domain and returns a cryptographically signed token
+            try {
+                const initResponse = await fetch(`${this.config.apiBase}/api/v1/widget/init`, {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                const initData = await initResponse.json();
 
-                    if (!verifyResponse.ok || !verifyData.verified) {
-                        const rawError = verifyData.error;
-                        if (rawError && rawError.includes('Site not found')) {
-                            this.state.error = 'Comments are not enabled for this domain yet.';
-                            this.state.errorDetail = 'If you are the site owner, please add this domain in your CommentKit dashboard.';
-                            this.state.errorType = 'warning';
-                        } else {
-                            this.state.error = rawError || 'This site is not verified with CommentKit. Site owners must verify domain ownership to enable comments.';
-                            this.state.errorType = 'error';
-                        }
-                        this.state.loading = false;
-                        this.render();
-                        return;
+                if (!initResponse.ok || !initData.token) {
+                    const rawError = initData.error;
+                    if (rawError && rawError.includes('not registered')) {
+                        this.state.error = 'Comments are not enabled for this domain yet.';
+                        this.state.errorDetail = 'If you are the site owner, please add this domain in your CommentKit dashboard.';
+                        this.state.errorType = 'warning';
+                    } else if (rawError && rawError.includes('not verified')) {
+                        this.state.error = 'This site is not verified with CommentKit.';
+                        this.state.errorDetail = 'Site owners must verify domain ownership to enable comments.';
+                        this.state.errorType = 'error';
+                    } else {
+                        this.state.error = rawError || 'Failed to initialize CommentKit.';
+                        this.state.errorType = 'error';
                     }
-                } catch (e) {
-                    console.error('[CommentKit] Failed to verify site:', e);
-                    this.state.error = 'Failed to verify site registration. Please try again later.';
                     this.state.loading = false;
                     this.render();
                     return;
                 }
+
+                // Store the signed origin token - will be passed to iframe and used in API calls
+                this.originToken = initData.token;
+
+            } catch (e) {
+                console.error('[CommentKit] Failed to initialize:', e);
+                this.state.error = 'Failed to connect to CommentKit. Please try again later.';
+                this.state.loading = false;
+                this.render();
+                return;
             }
 
             this.setupMessageListener();
@@ -1196,9 +1208,10 @@
             const iframeParams = new URLSearchParams({
                 domain: this.config.domain,
                 pageId: this.config.pageId,
-                parentOrigin: window.location.origin,  // Required for origin validation
+                parentOrigin: window.location.origin,  // Required for postMessage validation
                 apiBase: this.config.apiBase,          // Where API calls should go
                 csrfToken: this.csrfToken,             // CSRF token for mutation requests
+                originToken: this.originToken || '',   // Signed token proving page origin (anti-spoofing)
             });
 
             // Widget iframe is served from widgetBase, but API calls go to apiBase

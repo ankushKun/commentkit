@@ -12,6 +12,13 @@ database_id = "cce89088-e2cf-4b79-883d-22f5602473c6"
 ENVIRONMENT = "production"
 BASE_URL = "https://commentkit.ankushkun.workers.dev"
 FRONTEND_URL = "https://commentkit.ankush.one"
+# Additional allowed CORS origins (comma-separated), verified site domains are automatically allowed
+ALLOWED_ORIGINS = ""
+# Privacy settings - disabled by default for GDPR compliance
+# Set to "true" to enable IP address collection
+COLLECT_IP_ADDRESS = "false"
+# Set to "true" to enable user agent collection
+COLLECT_USER_AGENT = "false"
 
 # Dev environment overrides
 [env.dev]

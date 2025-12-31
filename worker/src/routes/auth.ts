@@ -32,6 +32,55 @@ function formatDate(date: Date): string {
     return date.toISOString().replace('T', ' ').slice(0, 19);
 }
 
+// Create a secure auth cookie
+function createAuthCookie(token: string, env: Env, maxAgeDays: number = 30): string {
+    const isProduction = env.ENVIRONMENT === 'production';
+    const maxAge = maxAgeDays * 24 * 60 * 60; // Convert to seconds
+
+    // Cookie settings:
+    // - HttpOnly: Not accessible to JavaScript (XSS protection)
+    // - Secure: Only sent over HTTPS (required for SameSite=None)
+    // - SameSite=None: Required for cross-origin iframe usage
+    // - Path=/: Available for all paths
+    const parts = [
+        `ck_auth=${token}`,
+        `Max-Age=${maxAge}`,
+        'Path=/',
+        'HttpOnly',
+    ];
+
+    if (isProduction) {
+        parts.push('Secure');
+        parts.push('SameSite=None');
+    } else {
+        // In development, use Lax for easier testing
+        parts.push('SameSite=Lax');
+    }
+
+    return parts.join('; ');
+}
+
+// Create a cookie that clears the auth token
+function createLogoutCookie(env: Env): string {
+    const isProduction = env.ENVIRONMENT === 'production';
+
+    const parts = [
+        'ck_auth=',
+        'Max-Age=0',
+        'Path=/',
+        'HttpOnly',
+    ];
+
+    if (isProduction) {
+        parts.push('Secure');
+        parts.push('SameSite=None');
+    } else {
+        parts.push('SameSite=Lax');
+    }
+
+    return parts.join('; ');
+}
+
 // POST /api/v1/auth/login - Send magic link
 const loginSchema = z.object({
     email: z.string().email(),
@@ -108,8 +157,12 @@ auth.get('/verify', async (c) => {
 
     await db.createSession(user.id, tokenHash, expiresAt);
 
-    return c.json({
-        token: sessionToken,
+    // Set HttpOnly cookie for the session
+    const cookie = createAuthCookie(sessionToken, c.env, 30);
+
+    // Return response with cookie
+    const response = c.json({
+        token: sessionToken,  // Still return token for backward compatibility
         user: {
             id: user.id,
             email: user.email,
@@ -120,6 +173,9 @@ auth.get('/verify', async (c) => {
             updated_at: user.updated_at,
         },
     });
+
+    response.headers.set('Set-Cookie', cookie);
+    return response;
 });
 
 // GET /api/v1/auth/me - Get current user with optional bootstrap data
@@ -204,17 +260,32 @@ auth.patch('/profile', zValidator('json', updateProfileSchema), async (c) => {
 
 // POST /api/v1/auth/logout - Logout
 auth.post('/logout', async (c) => {
+    const db = new Database(c.env.DB);
+
+    // Check for Bearer token in header
     const authHeader = c.req.header('Authorization');
     if (authHeader?.startsWith('Bearer ')) {
         const token = authHeader.slice(7);
         if (token) {
             const tokenHash = await hashToken(token);
-            const db = new Database(c.env.DB);
             await db.deleteSession(tokenHash);
         }
     }
 
-    return c.json({ message: 'Logged out successfully' });
+    // Also check for cookie-based auth
+    const cookies = c.req.header('Cookie');
+    if (cookies) {
+        const cookieMatch = cookies.match(/ck_auth=([^;]+)/);
+        if (cookieMatch && cookieMatch[1]) {
+            const tokenHash = await hashToken(cookieMatch[1]);
+            await db.deleteSession(tokenHash);
+        }
+    }
+
+    // Clear the auth cookie
+    const response = c.json({ message: 'Logged out successfully' });
+    response.headers.set('Set-Cookie', createLogoutCookie(c.env));
+    return response;
 });
 
 export { auth };

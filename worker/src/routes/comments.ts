@@ -1,11 +1,87 @@
-import { Hono } from 'hono';
+import { Hono, Context } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { Database } from '../db';
 import { getAuthUser } from '../middleware';
+import { verifyOriginToken } from './widget';
 import type { CommentResponse, Env, PageResponse } from '../types';
 
 const comments = new Hono<{ Bindings: Env }>();
+
+// Basic HTML sanitization - removes/escapes potentially dangerous HTML
+// This is defense-in-depth; the frontend also sanitizes content when rendering
+function sanitizeContent(input: string): string {
+    // Remove null bytes (can cause issues in some contexts)
+    let sanitized = input.replace(/\0/g, '');
+
+    // Limit length to prevent abuse
+    sanitized = sanitized.slice(0, 10000);
+
+    // Note: We don't do full HTML escaping here because:
+    // 1. The frontend uses escapeHtml when rendering
+    // 2. Storing escaped content would cause double-escaping issues
+    // 3. We want to preserve the original content for potential markdown/formatting in the future
+    // Instead, we just remove obviously malicious patterns
+
+    // Remove script tags and their content
+    sanitized = sanitized.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+
+    // Remove event handlers
+    sanitized = sanitized.replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, '');
+    sanitized = sanitized.replace(/\s*on\w+\s*=\s*[^\s>]*/gi, '');
+
+    // Remove javascript: URLs
+    sanitized = sanitized.replace(/javascript\s*:/gi, '');
+
+    // Remove data: URLs (can contain scripts)
+    sanitized = sanitized.replace(/data\s*:[^,\s]*base64/gi, '');
+
+    return sanitized.trim();
+}
+
+// Validate that the request has a valid signed origin token
+// The token is obtained from /widget/init and proves the actual page origin
+// This prevents site impersonation attacks because:
+// 1. Token is signed with our secret key
+// 2. Token contains the domain from the Origin header (browser-set, can't be spoofed)
+// 3. Attacker can't forge a token for a domain they don't control
+
+async function validateOriginDomain(c: Context<{ Bindings: Env }>, claimedDomain: string): Promise<{ valid: boolean; error?: string }> {
+    // API key authenticated requests bypass origin check (for server-to-server integrations)
+    const apiKey = c.req.header('X-API-Key');
+    if (apiKey) {
+        return { valid: true };
+    }
+
+    // In development, allow bypassing
+    if (c.env.ENVIRONMENT === 'development') {
+        return { valid: true };
+    }
+
+    // Get the signed origin token
+    const originToken = c.req.header('X-Origin-Token');
+
+    if (!originToken) {
+        return { valid: false, error: 'X-Origin-Token header required. Call /widget/init first.' };
+    }
+
+    // Verify the token signature and get the proven domain
+    const tokenResult = await verifyOriginToken(originToken, c.env.JWT_SECRET);
+
+    if (!tokenResult.valid) {
+        return { valid: false, error: tokenResult.error || 'Invalid origin token' };
+    }
+
+    // The token domain must match the claimed domain
+    if (tokenResult.domain !== claimedDomain) {
+        return {
+            valid: false,
+            error: `Token domain "${tokenResult.domain}" does not match claimed domain "${claimedDomain}"`
+        };
+    }
+
+    return { valid: true };
+}
 
 // GET /api/v1/sites/comments - Get page comments by domain and pageId
 comments.get('/comments', async (c) => {
@@ -108,6 +184,13 @@ comments.post('/comments', zValidator('json', createCommentByDomainSchema), asyn
     const body = c.req.valid('json');
     const db = new Database(c.env.DB);
 
+    // SECURITY: Validate that the request Origin matches the claimed domain
+    // This prevents site impersonation attacks
+    const originValidation = await validateOriginDomain(c, body.domain);
+    if (!originValidation.valid) {
+        return c.json({ error: originValidation.error || 'Origin validation failed' }, 403);
+    }
+
     // Get site by domain
     const site = await db.getSiteByDomain(body.domain);
     if (!site) {
@@ -143,18 +226,29 @@ comments.post('/comments', zValidator('json', createCommentByDomainSchema), asyn
         effectiveAuthorName = authorName;
     }
 
-    // Get client info
-    const ipAddress = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For');
-    const userAgent = c.req.header('User-Agent');
+    // Get client info only if privacy settings allow (privacy by default)
+    const collectIp = c.env.COLLECT_IP_ADDRESS === 'true';
+    const collectUa = c.env.COLLECT_USER_AGENT === 'true';
+
+    const ipAddress = collectIp
+        ? (c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For'))
+        : null;
+    const userAgent = collectUa
+        ? c.req.header('User-Agent')
+        : null;
+
+    // Sanitize user-provided content for XSS prevention (defense-in-depth)
+    const sanitizedContent = sanitizeContent(body.content);
+    const sanitizedAuthorName = authorName ? sanitizeContent(authorName) : undefined;
 
     const comment = await db.createComment({
         siteId: site.id,
         pageId: page.id,
         userId,
-        authorName,
+        authorName: sanitizedAuthorName,
         authorEmail,
         parentId: body.parent_id,
-        content: body.content,
+        content: sanitizedContent,
         ipAddress: ipAddress ?? undefined,
         userAgent: userAgent ?? undefined,
     });
@@ -442,7 +536,9 @@ comments.patch('/comments/:id', zValidator('json', editCommentSchema), async (c)
         return c.json({ error: 'Forbidden' }, 403);
     }
 
-    const updated = await db.updateComment(commentId, body.content);
+    // Sanitize content for XSS prevention
+    const sanitizedContent = sanitizeContent(body.content);
+    const updated = await db.updateComment(commentId, sanitizedContent);
 
     const response: CommentResponse = {
         id: updated.id,
