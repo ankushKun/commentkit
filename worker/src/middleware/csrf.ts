@@ -133,6 +133,18 @@ export async function validateCsrf(c: Context<{ Bindings: Env }>, next: Function
 
     // Only check mutation requests
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+        // Exempt authentication entry points (no CSRF token exists yet)
+        const path = new URL(c.req.url).pathname;
+        const exemptPaths = [
+            '/api/v1/auth/login',      // Entry point - user doesn't have a token yet
+            '/api/v1/auth/verify',     // Uses magic link token, not session-based
+        ];
+
+        if (exemptPaths.includes(path)) {
+            await next();
+            return;
+        }
+
         // Allow API key authenticated requests (for third-party integrations)
         const apiKey = c.req.header('X-API-Key');
         if (apiKey) {
