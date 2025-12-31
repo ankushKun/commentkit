@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { Database } from '../db';
 import { getAuthUser, hashToken } from '../middleware';
+import { generateCsrfToken } from '../middleware/csrf';
 import type { Env } from '../types';
 import { sendMagicLinkEmail } from '../utils/email';
 
@@ -160,9 +161,14 @@ auth.get('/verify', async (c) => {
     // Set HttpOnly cookie for the session
     const cookie = createAuthCookie(sessionToken, c.env, 30);
 
+    // Generate CSRF token for the frontend
+    const origin = c.req.header('Origin') || c.env.FRONTEND_URL || c.env.BASE_URL || '';
+    const csrfToken = await generateCsrfToken(origin, c.env.JWT_SECRET);
+
     // Return response with cookie
     const response = c.json({
         token: sessionToken,  // Still return token for backward compatibility
+        csrf_token: csrfToken,
         user: {
             id: user.id,
             email: user.email,
@@ -187,6 +193,10 @@ auth.get('/me', async (c) => {
 
     const includeBootstrap = c.req.query('bootstrap') === 'true';
 
+    // Generate CSRF token for the frontend
+    const origin = c.req.header('Origin') || c.env.FRONTEND_URL || c.env.BASE_URL || '';
+    const csrfToken = await generateCsrfToken(origin, c.env.JWT_SECRET);
+
     const userData = {
         id: user.id,
         email: user.email,
@@ -195,6 +205,7 @@ auth.get('/me', async (c) => {
         is_superadmin: user.is_superadmin,
         created_at: user.created_at,
         updated_at: user.updated_at,
+        csrf_token: csrfToken,
     };
 
     if (!includeBootstrap) {

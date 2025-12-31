@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useRef, type ReactNode } from 'react';
-import { auth, type User, type BootstrapData } from './api';
+import { auth, type User, type BootstrapData, setCsrfToken } from './api';
 
 interface AuthContextType {
     user: User | null;
@@ -27,7 +27,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) {
             // User not authenticated (no valid cookie)
             setUser(null);
+            setCsrfToken(null);
         } else if (data) {
+            // Store CSRF token for future requests
+            if (data.csrf_token) {
+                setCsrfToken(data.csrf_token);
+            }
             // Store bootstrap data for consumption
             if (data.bootstrap) {
                 bootstrapRef.current = data.bootstrap;
@@ -49,6 +54,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Verify token - server will set HttpOnly cookie in response
             auth.verify(token).then(({ data, error }) => {
                 if (data && !error) {
+                    // Store CSRF token
+                    if (data.csrf_token) {
+                        setCsrfToken(data.csrf_token);
+                    }
                     // No need to store token - server sets HttpOnly cookie
                     setUser(data.user);
 
@@ -80,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Server will clear HttpOnly cookie
         await auth.logout();
         setUser(null);
+        setCsrfToken(null);
         bootstrapRef.current = null;
     };
 

@@ -138,6 +138,7 @@ export async function validateCsrf(c: Context<{ Bindings: Env }>, next: Function
         const exemptPaths = [
             '/api/v1/auth/login',      // Entry point - user doesn't have a token yet
             '/api/v1/auth/verify',     // Uses magic link token, not session-based
+            '/api/v1/auth/logout',     // Allow logout even if CSRF token expired
         ];
 
         if (exemptPaths.includes(path)) {

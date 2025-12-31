@@ -16,6 +16,17 @@ const API_BASE = isLocalhost()
     ? 'http://localhost:8787'  // Local development
     : 'https://commentkit.ankushkun.workers.dev';  // Production
 
+// CSRF token storage
+let csrfToken: string | null = null;
+
+export function setCsrfToken(token: string | null) {
+    csrfToken = token;
+}
+
+export function getCsrfToken(): string | null {
+    return csrfToken;
+}
+
 interface ApiResponse<T> {
     data: T | null;
     error: string | null;
@@ -27,13 +38,21 @@ async function request<T>(
     options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
     try {
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            ...(options.headers as Record<string, string>),
+        };
+
+        // Add CSRF token for mutation requests
+        const method = options.method?.toUpperCase();
+        if (csrfToken && method && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+            headers['X-CSRF-Token'] = csrfToken;
+        }
+
         const res = await fetch(`${API_BASE}${path}`, {
             ...options,
             credentials: 'include', // Include HttpOnly cookies for authentication
-            headers: {
-                'Content-Type': 'application/json',
-                ...options.headers,
-            },
+            headers,
         });
 
         const json = await res.json().catch(() => null);
@@ -75,7 +94,7 @@ export const auth = {
         }),
 
     verify: (token: string) =>
-        request<{ token: string; user: User }>(`/api/v1/auth/verify?token=${token}`),
+        request<{ token: string; user: User; csrf_token: string }>(`/api/v1/auth/verify?token=${token}`),
 
     // Get current user, optionally with bootstrap data to save an extra API call
     me: (options?: { bootstrap?: boolean }) =>
@@ -284,6 +303,7 @@ export interface User {
     is_superadmin: boolean;
     created_at: string;
     updated_at: string;
+    csrf_token?: string;
 }
 
 export interface GlobalStats {
