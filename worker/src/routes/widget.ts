@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { Database } from '../db';
-import type { Env } from '../types';
+import type { Env, Variables } from '../types';
+import { generateCsrfToken } from '../middleware/csrf';
 
-const widget = new Hono<{ Bindings: Env }>();
+const widget = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // HMAC signing for origin tokens
 async function signOriginToken(domain: string, timestamp: number, secret: string): Promise<string> {
@@ -82,6 +83,30 @@ widget.get('/init', async (c) => {
         const url = new URL(origin);
         const domain = url.hostname;
 
+        const isDevelopment = c.env.ENVIRONMENT === 'development';
+        const isLocalhost = domain === 'localhost' || domain === '127.0.0.1' || domain.endsWith('.local');
+
+        console.log('[Widget Init] Environment:', c.env.ENVIRONMENT, 'Domain:', domain, 'isDev:', isDevelopment, 'isLocalhost:', isLocalhost);
+
+        // In development, allow localhost without database check
+        if (isDevelopment && isLocalhost) {
+            const timestamp = Date.now();
+            const signature = await signOriginToken(domain, timestamp, c.env.JWT_SECRET);
+            const token = btoa(`${domain}:${timestamp}:${signature}`);
+            const csrfToken = await generateCsrfToken(origin, c.env.JWT_SECRET);
+
+            console.log('[Widget Init] Development mode - allowing localhost:', domain);
+
+            return c.json({
+                token,
+                csrfToken,
+                domain,
+                site_id: 1,  // Fake site ID for development
+                verified: true,
+                expires_in: 3600
+            });
+        }
+
         const db = new Database(c.env.DB);
         const site = await db.getSiteByDomain(domain);
 
@@ -105,15 +130,24 @@ widget.get('/init', async (c) => {
         const signature = await signOriginToken(domain, timestamp, c.env.JWT_SECRET);
         const token = btoa(`${domain}:${timestamp}:${signature}`);
 
+        // Generate CSRF token for this origin
+        const csrfToken = await generateCsrfToken(origin, c.env.JWT_SECRET);
+
         return c.json({
             token,
+            csrfToken,  // Return CSRF token to client
             domain,
             site_id: site.id,
             verified: true,
             expires_in: 3600  // Token valid for 1 hour
         });
     } catch (e) {
-        return c.json({ error: 'Invalid origin' }, 400);
+        console.error('[Widget Init] Error:', e);
+        const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+        return c.json({
+            error: 'Invalid origin',
+            details: c.env.ENVIRONMENT === 'development' ? errorMessage : undefined
+        }, 400);
     }
 });
 

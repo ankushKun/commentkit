@@ -78,38 +78,9 @@ export async function requireSuperAdmin(c: Context<{ Bindings: Env }>, next: Nex
     await next();
 }
 
-// Validate CSRF token for mutation requests
-// This checks that:
-// 1. A CSRF token header is present for mutation requests
-// 2. The Origin header is present and valid (prevents requests from non-browser contexts)
-export async function validateCsrf(c: Context<{ Bindings: Env }>, next: Next) {
-    const method = c.req.method.toUpperCase();
-
-    // Only check mutation requests
-    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-        const origin = c.req.header('Origin');
-        const csrfToken = c.req.header('X-CSRF-Token');
-
-        // Origin must be present for mutation requests (prevents direct API calls from non-browser)
-        if (!origin) {
-            // Allow API key authenticated requests (for third-party integrations)
-            const apiKey = c.req.header('X-API-Key');
-            if (!apiKey) {
-                return c.json({ error: 'Origin header required for mutation requests' }, 403);
-            }
-        }
-
-        // CSRF token should be present (can be any value, as the real validation is 
-        // that the request comes from our allowed origins via CORS)
-        // This adds defense-in-depth: CORS prevents cross-origin JS from making requests,
-        // and the CSRF token requirement prevents form submissions from other sites
-        if (!csrfToken && !c.req.header('X-API-Key')) {
-            return c.json({ error: 'CSRF token required for mutation requests' }, 403);
-        }
-    }
-
-    await next();
-}
+// NOTE: CSRF validation has been moved to middleware/csrf.ts
+// Import and use validateCsrf from there instead
+// This function is kept for backward compatibility but should not be used
 
 // Get allowed origins from environment
 function getAllowedOrigins(env: Env): string[] {
@@ -150,11 +121,15 @@ function isOriginAllowedStatic(origin: string | undefined, env: Env): boolean {
         return true;
     }
 
-    // In development, allow localhost with any port
+    // In development, allow localhost with any port and .local domains
     if (env.ENVIRONMENT === 'development') {
         try {
             const url = new URL(origin);
-            if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+            if (url.hostname === 'localhost' ||
+                url.hostname === '127.0.0.1' ||
+                url.hostname.endsWith('.local') ||
+                url.hostname.startsWith('192.168.') ||
+                url.hostname.startsWith('10.')) {
                 return true;
             }
         } catch {
@@ -223,9 +198,21 @@ export async function cors(c: Context<{ Bindings: Env }>, next: Next) {
     c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key, X-CSRF-Token, X-Origin-Token');
 }
 
+// Generate a cryptographically secure nonce for CSP
+function generateNonce(): string {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return btoa(String.fromCharCode(...bytes));
+}
+
 // Security headers middleware
 // Adds various security-related headers to all responses
 export async function securityHeaders(c: Context<{ Bindings: Env }>, next: Next) {
+    // Generate nonce for this request
+    const nonce = generateNonce();
+    // @ts-expect-error
+    c.set('cspNonce', nonce);
+
     await next();
 
     // Content Security Policy
@@ -234,13 +221,13 @@ export async function securityHeaders(c: Context<{ Bindings: Env }>, next: Next)
     const baseUrl = c.env.BASE_URL || '';
     const frontendUrl = c.env.FRONTEND_URL || '';
 
-    // Build CSP directives
+    // Build CSP directives with nonce-based inline script support
     const cspDirectives = [
         "default-src 'self'",
-        "script-src 'self' 'unsafe-inline'",  // unsafe-inline needed for widget.html inline script
-        "style-src 'self' 'unsafe-inline'",   // unsafe-inline needed for inline styles
+        `script-src 'self' 'nonce-${nonce}'`,  // Only allow scripts with this nonce
+        "style-src 'self' 'unsafe-inline'",    // Keep unsafe-inline for styles (lower risk)
         `connect-src 'self' ${baseUrl} ${frontendUrl}`,  // API connections
-        `frame-ancestors ${frontendUrl} *`,   // Allow embedding in any frame (widget needs this)
+        `frame-ancestors ${frontendUrl} *`,    // Allow embedding in any frame (widget needs this)
         "img-src 'self' https://www.gravatar.com data:",  // Gravatar for avatars
         "form-action 'self'",
         "base-uri 'self'",

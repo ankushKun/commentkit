@@ -5,39 +5,19 @@ import { Database } from '../db';
 import { getAuthUser } from '../middleware';
 import { verifyOriginToken } from './widget';
 import type { CommentResponse, Env, PageResponse } from '../types';
+import {
+    sanitizeAuthorName,
+    sanitizeCommentContent,
+    sanitizeEmail,
+    sanitizePageTitle,
+    sanitizeUrl
+} from '../utils/sanitize';
 
 const comments = new Hono<{ Bindings: Env }>();
 
-// Basic HTML sanitization - removes/escapes potentially dangerous HTML
-// This is defense-in-depth; the frontend also sanitizes content when rendering
-function sanitizeContent(input: string): string {
-    // Remove null bytes (can cause issues in some contexts)
-    let sanitized = input.replace(/\0/g, '');
-
-    // Limit length to prevent abuse
-    sanitized = sanitized.slice(0, 10000);
-
-    // Note: We don't do full HTML escaping here because:
-    // 1. The frontend uses escapeHtml when rendering
-    // 2. Storing escaped content would cause double-escaping issues
-    // 3. We want to preserve the original content for potential markdown/formatting in the future
-    // Instead, we just remove obviously malicious patterns
-
-    // Remove script tags and their content
-    sanitized = sanitized.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-
-    // Remove event handlers
-    sanitized = sanitized.replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, '');
-    sanitized = sanitized.replace(/\s*on\w+\s*=\s*[^\s>]*/gi, '');
-
-    // Remove javascript: URLs
-    sanitized = sanitized.replace(/javascript\s*:/gi, '');
-
-    // Remove data: URLs (can contain scripts)
-    sanitized = sanitized.replace(/data\s*:[^,\s]*base64/gi, '');
-
-    return sanitized.trim();
-}
+// NOTE: HTML sanitization has been moved to utils/sanitize.ts
+// The old regex-based approach was vulnerable to bypasses
+// Now using strict allowlist-based sanitization that strips ALL HTML
 
 // Validate that the request has a valid signed origin token
 // The token is obtained from /widget/init and proves the actual page origin
@@ -102,6 +82,20 @@ comments.get('/comments', async (c) => {
     // Get site by domain
     const site = await db.getSiteByDomain(domain);
     if (!site) {
+        // In development, allow localhost without database setup
+        if (c.env.ENVIRONMENT === 'development' && (domain === 'localhost' || domain === '127.0.0.1' || domain.endsWith('.local'))) {
+            console.log('[Comments] Development mode - returning empty state for localhost:', domain);
+            const response: PageResponse = {
+                page_id: 0,
+                slug: pageId,
+                title: pageTitle || null,
+                comment_count: 0,
+                likes: 0,
+                user_liked: false,
+                comments: [],
+            };
+            return c.json(response);
+        }
         return c.json({ error: 'Site not found for domain: ' + domain }, 404);
     }
 
@@ -194,11 +188,34 @@ comments.post('/comments', zValidator('json', createCommentByDomainSchema), asyn
     // Get site by domain
     const site = await db.getSiteByDomain(body.domain);
     if (!site) {
+        // In development, allow localhost without database setup
+        // Return mock success response for easier testing
+        if (c.env.ENVIRONMENT === 'development' && (body.domain === 'localhost' || body.domain === '127.0.0.1' || body.domain.endsWith('.local'))) {
+            console.log('[Comments] Development mode - skipping database for localhost:', body.domain);
+
+            const mockResponse: CommentResponse = {
+                id: Date.now(), // Use timestamp as mock ID
+                author_name: body.author_name || 'Anonymous',
+                author_email_hash: null,
+                content: body.content,
+                parent_id: body.parent_id || null,
+                likes: 0,
+                user_liked: false,
+                created_at: new Date().toISOString(),
+                replies: [],
+            };
+
+            return c.json(mockResponse, 201);
+        }
         return c.json({ error: 'Site not found for domain: ' + body.domain }, 404);
     }
 
-    // Get or create page using pageId as the slug
-    const page = await db.getOrCreatePage(site.id, body.pageId, body.page_title, body.page_url);
+    // Sanitize page metadata early
+    const sanitizedPageTitle = body.page_title ? sanitizePageTitle(body.page_title) : undefined;
+    const sanitizedPageUrl = body.page_url ? (sanitizeUrl(body.page_url) ?? undefined) : undefined;
+
+    // Get or create page using pageId as the slug (with sanitized metadata)
+    const page = await db.getOrCreatePage(site.id, body.pageId, sanitizedPageTitle, sanitizedPageUrl);
 
     // Get auth user if present
     const authUser = await getAuthUser(c);
@@ -220,10 +237,14 @@ comments.post('/comments', zValidator('json', createCommentByDomainSchema), asyn
         if (!body.author_name?.trim()) {
             return c.json({ error: 'author_name is required for anonymous comments' }, 400);
         }
-        authorName = body.author_name;
-        authorEmail = body.author_email;
 
-        effectiveAuthorName = authorName;
+        // Sanitize guest author fields
+        const sanitizedName = sanitizeAuthorName(body.author_name);
+        const sanitizedMail = body.author_email ? sanitizeEmail(body.author_email) : undefined;
+
+        authorName = sanitizedName;
+        authorEmail = sanitizedMail ?? undefined;
+        effectiveAuthorName = sanitizedName;
     }
 
     // Get client info only if privacy settings allow (privacy by default)
@@ -237,15 +258,14 @@ comments.post('/comments', zValidator('json', createCommentByDomainSchema), asyn
         ? c.req.header('User-Agent')
         : null;
 
-    // Sanitize user-provided content for XSS prevention (defense-in-depth)
-    const sanitizedContent = sanitizeContent(body.content);
-    const sanitizedAuthorName = authorName ? sanitizeContent(authorName) : undefined;
+    // Sanitize comment content (strips all HTML)
+    const sanitizedContent = sanitizeCommentContent(body.content);
 
     const comment = await db.createComment({
         siteId: site.id,
         pageId: page.id,
         userId,
-        authorName: sanitizedAuthorName,
+        authorName,
         authorEmail,
         parentId: body.parent_id,
         content: sanitizedContent,
@@ -536,8 +556,8 @@ comments.patch('/comments/:id', zValidator('json', editCommentSchema), async (c)
         return c.json({ error: 'Forbidden' }, 403);
     }
 
-    // Sanitize content for XSS prevention
-    const sanitizedContent = sanitizeContent(body.content);
+    // Sanitize content for XSS prevention (strips all HTML)
+    const sanitizedContent = sanitizeCommentContent(body.content);
     const updated = await db.updateComment(commentId, sanitizedContent);
 
     const response: CommentResponse = {

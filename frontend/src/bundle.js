@@ -83,7 +83,7 @@
             this.container = container;
             this.config = config;
             this.iframe = null;
-            this.csrfToken = this.generateCsrfToken();
+            this.csrfToken = null;  // Will be set by server in init()
             this.state = {
                 loading: true,
                 error: null,
@@ -140,6 +140,9 @@
 
                 // Store the signed origin token - will be passed to iframe and used in API calls
                 this.originToken = initData.token;
+
+                // Store the CSRF token from server (cryptographically signed, origin-specific)
+                this.csrfToken = initData.csrfToken || this.generateCsrfToken(); // Fallback for older servers
 
             } catch (e) {
                 console.error('[CommentKit] Failed to initialize:', e);
@@ -1601,7 +1604,7 @@
                         </div>
                         <div class="ck-form-group">
                             <label for="ck-email">Email (optional)</label>
-                            <input type="email" id="ck-email" name="email" placeholder="your@email.com">
+                            <input type="email" id="ck-email" name="email" placeholder="your@email.com" pattern="[^\\s@]+@[^\\s@]+\\.[^\\s@]+" title="Please enter a valid email address (e.g., user@example.com)">
                         </div>
                     </div>
                     <div class="ck-form-group">
@@ -1620,7 +1623,7 @@
                 <form id="ck-login-form">
                     <div class="ck-form-group">
                         <label for="ck-login-email">Email address</label>
-                        <input type="email" id="ck-login-email" name="email" required placeholder="your@email.com">
+                        <input type="email" id="ck-login-email" name="email" required placeholder="your@email.com" pattern="[^\\s@]+@[^\\s@]+\\.[^\\s@]+" title="Please enter a valid email address (e.g., user@example.com)">
                     </div>
                     <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 12px;">
                         We'll send you a magic link to sign in. No password needed.
@@ -1729,7 +1732,7 @@
                                 </div>
                                 <div class="ck-form-group">
                                     <label>Email (optional)</label>
-                                    <input type="email" name="email" placeholder="your@email.com">
+                                    <input type="email" name="email" placeholder="your@email.com" pattern="[^\\s@]+@[^\\s@]+\\.[^\\s@]+" title="Please enter a valid email address (e.g., user@example.com)">
                                 </div>
                             </div>
                             <div class="ck-form-group">
@@ -1752,7 +1755,16 @@
             if (form) {
                 form.addEventListener('submit', (e) => {
                     e.preventDefault();
+
+                    // Use native HTML5 form validation
+                    if (!form.checkValidity()) {
+                        form.reportValidity();
+                        return;
+                    }
+
                     const formData = new FormData(form);
+                    const email = formData.get('email');
+
                     const commentData = {
                         content: formData.get('content'),
                         parent_id: null, // Top-level comments have no parent
@@ -1760,7 +1772,7 @@
                     // Include guest fields only if not authenticated
                     if (!this.state.user) {
                         commentData.author_name = formData.get('name');
-                        commentData.author_email = formData.get('email');
+                        commentData.author_email = email || undefined;
                     }
                     // Set scroll anchor to first visible comment
                     this.scrollAnchor = this.findFirstVisibleComment();
@@ -1868,12 +1880,21 @@
             if (loginForm) {
                 loginForm.addEventListener('submit', (e) => {
                     e.preventDefault();
+
+                    // Use native HTML5 form validation
+                    if (!loginForm.checkValidity()) {
+                        loginForm.reportValidity();
+                        return;
+                    }
+
                     const formData = new FormData(loginForm);
+                    const email = formData.get('email');
+
                     this.state.authLoading = true;
                     this.render();
                     this.sendToIframe({
                         action: 'login',
-                        email: formData.get('email'),
+                        email: email,
                         redirectUrl: window.location.href,  // Redirect back to this page after auth
                     });
                 });
@@ -2034,7 +2055,16 @@
             if (form) {
                 form.addEventListener('submit', (e) => {
                     e.preventDefault();
+
+                    // Use native HTML5 form validation
+                    if (!form.checkValidity()) {
+                        form.reportValidity();
+                        return;
+                    }
+
                     const formData = new FormData(form);
+                    const email = formData.get('email');
+
                     const commentData = {
                         content: formData.get('content'),
                         parent_id: parentId,
@@ -2042,7 +2072,7 @@
                     // Include guest fields only if not authenticated
                     if (!this.state.user) {
                         commentData.author_name = formData.get('name');
-                        commentData.author_email = formData.get('email');
+                        commentData.author_email = email || undefined;
                     }
                     // Set scroll anchor to the parent comment being replied to
                     this.scrollAnchor = parentId;
@@ -2284,12 +2314,21 @@
             if (loginForm) {
                 loginForm.addEventListener('submit', (e) => {
                     e.preventDefault();
+
+                    // Use native HTML5 form validation
+                    if (!loginForm.checkValidity()) {
+                        loginForm.reportValidity();
+                        return;
+                    }
+
                     const formData = new FormData(loginForm);
+                    const email = formData.get('email');
+
                     this.state.authLoading = true;
                     this.updateModalBody();
                     this.sendToIframe({
                         action: 'login',
-                        email: formData.get('email'),
+                        email: email,
                         redirectUrl: window.location.href,
                     });
                 });
@@ -2353,12 +2392,21 @@
                 if (loginForm) {
                     loginForm.addEventListener('submit', (e) => {
                         e.preventDefault();
+
+                        // Use native HTML5 form validation
+                        if (!loginForm.checkValidity()) {
+                            loginForm.reportValidity();
+                            return;
+                        }
+
                         const formData = new FormData(loginForm);
+                        const email = formData.get('email');
+
                         this.state.authLoading = true;
                         this.updateModalBody();
                         this.sendToIframe({
                             action: 'login',
-                            email: formData.get('email'),
+                            email: email,
                             redirectUrl: window.location.href,
                         });
                     });
@@ -2379,7 +2427,7 @@
                 <form id="ck-modal-login-form">
                     <div class="ck-form-group">
                         <label for="ck-modal-email">Email address</label>
-                        <input type="email" id="ck-modal-email" name="email" required placeholder="your@email.com" autocomplete="email">
+                        <input type="email" id="ck-modal-email" name="email" required placeholder="your@email.com" autocomplete="email" pattern="[^\\s@]+@[^\\s@]+\\.[^\\s@]+" title="Please enter a valid email address (e.g., user@example.com)">
                     </div>
                     <p style="font-size: 0.875rem; color: #6b7280; margin: 0 0 28px 0; line-height: 1.6;">
                         We'll send you a magic link to sign in. No password needed.

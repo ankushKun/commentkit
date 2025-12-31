@@ -26,14 +26,12 @@ async function request<T>(
     path: string,
     options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
-    const token = localStorage.getItem('auth_token');
-
     try {
         const res = await fetch(`${API_BASE}${path}`, {
             ...options,
+            credentials: 'include', // Include HttpOnly cookies for authentication
             headers: {
                 'Content-Type': 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
                 ...options.headers,
             },
         });

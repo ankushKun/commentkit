@@ -58,11 +58,12 @@ function getMagicLinkEmailTemplate(email: string, magicLink: string): string {
             line-height: 1.6;
             color: #1f2937;
             background-color: #f9fafb;
-            padding: 40px 20px;
+            padding: 40px 0;
         }
         .email-wrapper {
-            max-width: 600px;
+            max-width: 100%;
             margin: 0 auto;
+            padding: 0 20px;
         }
         .container {
             background-color: #ffffff;
@@ -214,12 +215,7 @@ function getMagicLinkEmailTemplate(email: string, magicLink: string): string {
 </head>
 <body>
     <div class="email-wrapper">
-        <div class="container">
-            <!-- Header -->
-            <div class="header">
-                <div class="logo">CommentKit</div>
-            </div>
-            
+        <div class="container">            
             <!-- Main Content -->
             <div class="content">
                 <div class="greeting">Hey there! 👋</div>

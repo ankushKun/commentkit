@@ -111,7 +111,28 @@
 
                 // Check for HTTP errors even with JSON response
                 if (!response.ok) {
-                    throw new Error(data.error || data.message || `Request failed: ${response.status}`);
+                    // Handle error message properly - it might be an object (from Zod validation)
+                    let errorMessage = `Request failed: ${response.status}`;
+
+                    if (data.error) {
+                        if (typeof data.error === 'string') {
+                            errorMessage = data.error;
+                        } else if (typeof data.error === 'object') {
+                            // Zod validation errors or other structured errors
+                            if (data.error.issues && Array.isArray(data.error.issues)) {
+                                // Zod error format
+                                errorMessage = data.error.issues.map(issue => issue.message).join(', ');
+                            } else if (data.error.message) {
+                                errorMessage = data.error.message;
+                            } else {
+                                errorMessage = JSON.stringify(data.error);
+                            }
+                        }
+                    } else if (data.message && typeof data.message === 'string') {
+                        errorMessage = data.message;
+                    }
+
+                    throw new Error(errorMessage);
                 }
 
                 return data;
@@ -217,10 +238,22 @@
                                     email: message.email
                                 }, CONFIG.parentOrigin);
                             } catch (e) {
+                                // Ensure error message is always a string
+                                let errorMessage = 'Failed to send login email';
+                                if (e && typeof e === 'object') {
+                                    if (e.message && typeof e.message === 'string') {
+                                        errorMessage = e.message;
+                                    } else if (e.message && typeof e.message === 'object') {
+                                        errorMessage = JSON.stringify(e.message);
+                                    }
+                                } else if (typeof e === 'string') {
+                                    errorMessage = e;
+                                }
+
                                 window.parent.postMessage({
                                     type: 'commentkit',
                                     action: 'error',
-                                    message: e.message || 'Failed to send login email'
+                                    message: errorMessage
                                 }, CONFIG.parentOrigin);
                             }
                             break;
@@ -235,10 +268,18 @@
                                     sendAuthState();
                                 }
                             } catch (e) {
+                                // Ensure error message is always a string
+                                let errorMessage = 'Invalid or expired login link';
+                                if (e && typeof e === 'object' && e.message && typeof e.message === 'string') {
+                                    errorMessage = e.message;
+                                } else if (typeof e === 'string') {
+                                    errorMessage = e;
+                                }
+
                                 window.parent.postMessage({
                                     type: 'commentkit',
                                     action: 'error',
-                                    message: e.message || 'Invalid or expired login link'
+                                    message: errorMessage
                                 }, CONFIG.parentOrigin);
                             }
                             break;
@@ -303,10 +344,19 @@
                     }
                 } catch (error) {
                     console.error('[CommentKit Bridge] Error:', error);
+
+                    // Ensure error message is always a string
+                    let errorMessage = 'An error occurred';
+                    if (error && typeof error === 'object' && error.message && typeof error.message === 'string') {
+                        errorMessage = error.message;
+                    } else if (typeof error === 'string') {
+                        errorMessage = error;
+                    }
+
                     window.parent.postMessage({
                         type: 'commentkit',
                         action: 'error',
-                        message: error.message || 'An error occurred'
+                        message: errorMessage
                     }, CONFIG.parentOrigin);
                 }
             });

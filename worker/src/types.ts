@@ -128,6 +128,11 @@ export interface Env {
     COLLECT_USER_AGENT?: string;  // 'true' or 'false' (default: 'false')
 }
 
+// Context variables (for Hono)
+export interface Variables {
+    cspNonce?: string;
+}
+
 // Auth context
 export interface AuthUser {
     id: number;

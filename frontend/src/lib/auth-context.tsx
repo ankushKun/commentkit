@@ -21,16 +21,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const bootstrapRef = useRef<BootstrapData | null>(null);
 
     const checkAuth = async () => {
-        const token = localStorage.getItem('auth_token');
-        if (!token) {
-            setLoading(false);
-            return;
-        }
-
+        // No need to check localStorage - server will read HttpOnly cookie
         // Request with bootstrap=true to get user + dashboard data in single call
         const { data, error } = await auth.me({ bootstrap: true });
         if (error) {
-            localStorage.removeItem('auth_token');
+            // User not authenticated (no valid cookie)
             setUser(null);
         } else if (data) {
             // Store bootstrap data for consumption
@@ -51,10 +46,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const redirectUrl = params.get('redirect');
 
         if (token) {
-            // Verify and store token
+            // Verify token - server will set HttpOnly cookie in response
             auth.verify(token).then(({ data, error }) => {
                 if (data && !error) {
-                    localStorage.setItem('auth_token', data.token);
+                    // No need to store token - server sets HttpOnly cookie
                     setUser(data.user);
 
                     // Redirect to the original page if specified
@@ -82,8 +77,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const logout = async () => {
+        // Server will clear HttpOnly cookie
         await auth.logout();
-        localStorage.removeItem('auth_token');
         setUser(null);
         bootstrapRef.current = null;
     };
