@@ -650,6 +650,18 @@
                     animation: none;
                 }
 
+                /* Deleted comment styling */
+                .ck-comment-deleted {
+                    opacity: 0.6;
+                }
+
+                .ck-comment-deleted .ck-comment-inner {
+                    background: #fafafa;
+                    border-radius: var(--ck-radius);
+                    padding: 12px;
+                    border: 1px dashed #e5e7eb;
+                }
+
                 .ck-replies {
                     margin-top: 16px;
                     margin-left: 56px; /* Align with parent comment content */
@@ -1654,7 +1666,36 @@
             const hasReplies = comment.replies && comment.replies.length > 0;
             const replyCount = hasReplies ? comment.replies.length : 0;
             const isExpanded = this.state.expandedReplies.has(comment.id);
+            const isPlaceholder = comment.isPlaceholder || false;
 
+            // Render placeholder for deleted comments
+            if (isPlaceholder) {
+                return `
+                    <div class="ck-comment ck-comment-deleted" data-id="${comment.id}">
+                        <div class="ck-comment-inner">
+                            <div class="ck-avatar" style="background: #f3f4f6; color: #9ca3af; border-color: #e5e7eb;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                                </svg>
+                            </div>
+                            <div class="ck-comment-content">
+                                <div class="ck-comment-body" style="color: #9ca3af; font-style: italic;">
+                                    ${this.escapeHtml(comment.content)}
+                                </div>
+                            </div>
+                        </div>
+                        ${hasReplies ? `
+                            <div class="ck-replies">
+                                ${comment.replies.map(r => this.renderComment(r, depth + 1)).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+
+            // Regular comment rendering
             return `
                 <div class="ck-comment" data-id="${comment.id}">
                     <div class="ck-comment-inner">
@@ -2118,19 +2159,62 @@
         buildTree(comments) {
             const map = new Map();
             const roots = [];
+            const orphanedReplies = []; // Track comments with missing parents
 
             // Helper to parse dates securely for sorting
             const getDate = (d) => new Date(d.includes('Z') || d.includes('+') ? d : d.replace(' ', 'T') + 'Z');
 
+            // First pass: build map of all existing comments
             comments.forEach(c => map.set(c.id, { ...c, replies: [] }));
+
+            // Second pass: attach replies to parents or collect orphans
             comments.forEach(c => {
                 const comment = map.get(c.id);
-                if (c.parent_id && map.has(c.parent_id)) {
-                    map.get(c.parent_id).replies.push(comment);
+                if (c.parent_id) {
+                    if (map.has(c.parent_id)) {
+                        // Parent exists, attach to it
+                        map.get(c.parent_id).replies.push(comment);
+                    } else {
+                        // Parent is missing (deleted/rejected/spam), track as orphan
+                        orphanedReplies.push({ parentId: c.parent_id, comment });
+                    }
                 } else {
+                    // Top-level comment
                     roots.push(comment);
                 }
             });
+
+            // Third pass: Create placeholder comments for missing parents
+            if (orphanedReplies.length > 0) {
+                // Group orphans by parent ID
+                const orphansByParent = new Map();
+                orphanedReplies.forEach(({ parentId, comment }) => {
+                    if (!orphansByParent.has(parentId)) {
+                        orphansByParent.set(parentId, []);
+                    }
+                    orphansByParent.get(parentId).push(comment);
+                });
+
+                // Create placeholder for each missing parent
+                orphansByParent.forEach((replies, parentId) => {
+                    // Create a placeholder comment
+                    const placeholder = {
+                        id: parentId,
+                        author_name: '[deleted]',
+                        author_email_hash: null,
+                        content: '[deleted comment]',
+                        parent_id: null,
+                        likes: 0,
+                        user_liked: false,
+                        created_at: replies[0].created_at, // Use first reply's timestamp
+                        replies: replies,
+                        isPlaceholder: true, // Flag to identify placeholders
+                    };
+
+                    map.set(parentId, placeholder);
+                    roots.push(placeholder);
+                });
+            }
 
             // Sort roots: Newest first
             roots.sort((a, b) => getDate(b.created_at) - getDate(a.created_at));
