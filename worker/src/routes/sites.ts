@@ -346,72 +346,11 @@ sites.get('/:id/verification', async (c) => {
         verified: !!site.verified,
         verified_at: site.verified_at,
         verification_token: token,
-        methods: {
-            dns: {
-                type: 'DNS TXT Record',
-                description: 'Add a TXT record to your domain DNS settings (most secure)',
-                record_type: 'TXT',
-                record_name: '_commentkit',
-                record_value: `commentkit-verify=${token}`,
-                full_record: `_commentkit.${site.domain}`,
-                note: 'DNS changes may take up to 48 hours to propagate'
-            },
-            file: {
-                type: 'File Upload',
-                description: 'Upload a verification file to your website',
-                file_path: '/.well-known/commentkit-verify.txt',
-                file_content: token,
-                verification_url: `https://${site.domain}/.well-known/commentkit-verify.txt`
-            },
-            meta: {
-                type: 'HTML Meta Tag',
-                description: 'Add a meta tag to your homepage',
-                meta_tag: `<meta name="commentkit-verify" content="${token}">`,
-                note: 'Add this tag inside the <head> section of your homepage'
-            }
-        }
+        verification_file_path: '/.well-known/commentkit-verify.txt',
+        verification_file_content: token,
+        verification_url: `https://${site.domain}/.well-known/commentkit-verify.txt`,
     });
 });
-
-// Helper: Verify via DNS TXT record
-async function verifyViaDns(domain: string, token: string): Promise<{ success: boolean; error?: string }> {
-    try {
-        // Use Cloudflare DNS-over-HTTPS to lookup TXT records
-        const dnsQuery = `_commentkit.${domain}`;
-        const response = await fetch(
-            `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(dnsQuery)}&type=TXT`,
-            {
-                headers: {
-                    'Accept': 'application/dns-json'
-                }
-            }
-        );
-
-        if (!response.ok) {
-            return { success: false, error: 'DNS lookup failed' };
-        }
-
-        const data = await response.json() as { Answer?: Array<{ data: string }> };
-
-        if (!data.Answer || data.Answer.length === 0) {
-            return { success: false, error: 'No TXT record found at _commentkit.' + domain };
-        }
-
-        // Check if any TXT record matches
-        const expectedValue = `commentkit-verify=${token}`;
-        for (const record of data.Answer) {
-            // TXT records can be quoted
-            const value = record.data.replace(/^"|"$/g, '').trim();
-            if (value === expectedValue) {
-                return { success: true };
-            }
-        }
-
-        return { success: false, error: 'TXT record found but value does not match' };
-    } catch (error) {
-        return { success: false, error: 'DNS lookup error: ' + (error instanceof Error ? error.message : 'Unknown error') };
-    }
-}
 
 // Helper: Verify via file
 async function verifyViaFile(domain: string, token: string): Promise<{ success: boolean; error?: string }> {
@@ -441,50 +380,8 @@ async function verifyViaFile(domain: string, token: string): Promise<{ success: 
     }
 }
 
-// Helper: Verify via meta tag
-async function verifyViaMeta(domain: string, token: string): Promise<{ success: boolean; error?: string }> {
-    const homepageUrl = `https://${domain}/`;
-
-    try {
-        const response = await fetch(homepageUrl, {
-            headers: {
-                'User-Agent': 'CommentKit-Verifier/1.0',
-            },
-        });
-
-        if (!response.ok) {
-            return { success: false, error: `HTTP ${response.status} - Could not fetch homepage` };
-        }
-
-        const html = await response.text();
-
-        // Look for the meta tag
-        // Pattern: <meta name="commentkit-verify" content="TOKEN">
-        const metaPattern = /<meta\s+name\s*=\s*["']commentkit-verify["']\s+content\s*=\s*["']([^"']+)["']/i;
-        const altPattern = /<meta\s+content\s*=\s*["']([^"']+)["']\s+name\s*=\s*["']commentkit-verify["']/i;
-
-        const match = html.match(metaPattern) || html.match(altPattern);
-
-        if (!match) {
-            return { success: false, error: 'No commentkit-verify meta tag found on homepage' };
-        }
-
-        if (match[1] === token) {
-            return { success: true };
-        } else {
-            return { success: false, error: 'Meta tag found but verification token does not match' };
-        }
-    } catch (error) {
-        return { success: false, error: 'Could not reach homepage: ' + domain };
-    }
-}
-
 // POST /api/v1/sites/:id/verify - Trigger verification check
-const verifySchema = z.object({
-    method: z.enum(['dns', 'file', 'meta']).optional().default('file'),
-});
-
-sites.post('/:id/verify', zValidator('json', verifySchema), async (c) => {
+sites.post('/:id/verify', async (c) => {
     const user = await getAuthUser(c);
     if (!user) {
         return c.json({ error: 'Authentication required' }, 401);
@@ -494,9 +391,6 @@ sites.post('/:id/verify', zValidator('json', verifySchema), async (c) => {
     if (isNaN(siteId)) {
         return c.json({ error: 'Invalid site_id' }, 400);
     }
-
-    const body = c.req.valid('json');
-    const method = body.method;
 
     const db = new Database(c.env.DB);
     const site = await db.getSiteById(siteId);
@@ -513,32 +407,17 @@ sites.post('/:id/verify', zValidator('json', verifySchema), async (c) => {
         return c.json({ error: 'No verification token generated. Get verification instructions first.' }, 400);
     }
 
-    let result: { success: boolean; error?: string };
-
-    switch (method) {
-        case 'dns':
-            result = await verifyViaDns(site.domain, site.verification_token);
-            break;
-        case 'meta':
-            result = await verifyViaMeta(site.domain, site.verification_token);
-            break;
-        case 'file':
-        default:
-            result = await verifyViaFile(site.domain, site.verification_token);
-            break;
-    }
+    const result = await verifyViaFile(site.domain, site.verification_token);
 
     if (result.success) {
         await db.markSiteVerified(siteId);
         return c.json({
             verified: true,
-            method: method,
             message: 'Site successfully verified!',
         });
     } else {
         return c.json({
             verified: false,
-            method: method,
             error: result.error,
         });
     }
