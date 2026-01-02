@@ -176,6 +176,28 @@ export function LoginForm() {
                 </p>
             </div>
 
+            {/* Video Demo Section */}
+            <div className="mb-8 md:mb-12">
+                <div className="relative w-full max-w-4xl mx-auto">
+                    <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-slate-100 p-1">
+                        <div className="relative bg-black rounded-xl overflow-hidden" style={{ paddingBottom: '67.86%' }}>
+                            <iframe
+                                className="absolute top-0 left-0 w-full h-full"
+                                src="https://www.youtube.com/embed/98HBWGddT6o?si=fDH1b994V6nR_K5S&amp;controls=1&amp;modestbranding=1&amp;rel=0&amp;autoplay=1&amp;mute=0&amp;loop=1"
+                                title="CommentKit Demo"
+                                frameBorder="0"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                referrerPolicy="strict-origin-when-cross-origin"
+                                allowFullScreen
+                            />
+                        </div>
+                    </div>
+                    <p className="text-center text-sm text-slate-500 mt-4">
+                        Watch how CommentKit works in action
+                    </p>
+                </div>
+            </div>
+
             {/* Main Content: Login first on mobile, then features */}
             <div className="grid lg:grid-cols-5 gap-6 md:gap-8 items-start">
                 {/* Login Card - Shows first on mobile */}
