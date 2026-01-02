@@ -73,6 +73,15 @@
             });
 
             this.instances.push(instance);
+
+            // Track widget initialization
+            trackWidget('widget_initialized', {
+                domain,
+                page_id: pageId,
+                theme,
+                is_localhost: isLocalhost()
+            });
+
             return instance;
         },
     };

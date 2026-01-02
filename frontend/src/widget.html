@@ -22,6 +22,20 @@
 
 <body>
     <script>
+        // Initialize PostHog Analytics for widget iframe
+        !function (t, e) { var o, n, p, r; e.__SV || (window.posthog && window.posthog.__loaded) || (window.posthog = e, e._i = [], e.init = function (i, s, a) { function g(t, e) { var o = e.split("."); 2 == o.length && (t = t[o[0]], e = o[1]), t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))) } } (p = t.createElement("script")).type = "text/javascript", p.crossOrigin = "anonymous", p.async = !0, p.src = s.api_host.replace(".i.posthog.com", "-assets.i.posthog.com") + "/static/array.js", (r = t.getElementsByTagName("script")[0]).parentNode.insertBefore(p, r); var u = e; for (void 0 !== a ? u = e[a] = [] : a = "posthog", u.people = u.people || [], u.toString = function (t) { var e = "posthog"; return "posthog" !== a && (e += "." + a), t || (e += " (stub)"), e }, u.people.toString = function () { return u.toString(1) + ".people (stub)" }, o = "init Xr es pi Zr rs Kr Qr capture Ni calculateEventProperties os register register_once register_for_session unregister unregister_for_session ds getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSurveysLoaded onSessionId getSurveys getActiveMatchingSurveys renderSurvey displaySurvey cancelPendingSurvey canRenderSurvey canRenderSurveyAsync identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException startExceptionAutocapture stopExceptionAutocapture loadToolbar get_property getSessionProperty us ns createPersonProfile hs Vr vs opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing get_explicit_consent_status is_capturing clear_opt_in_out_capturing ss debug O ls getPageViewId captureTraceFeedback captureTraceMetric qr".split(" "), n = 0; n < o.length; n++)g(u, o[n]); e._i.push([i, s, a]) }, e.__SV = 1) }(document, window.posthog || []);
+        posthog.init('phc_nBvIMuMmaqQkAXL36Bi6eyTRga0A04klevYFyZf4cfc', {
+            api_host: 'https://eu.i.posthog.com',
+            person_profiles: 'identified_only'
+        });
+
+        // Analytics tracking helper
+        function trackWidget(eventName, properties = {}) {
+            if (window.posthog) {
+                window.posthog.capture(eventName, properties);
+            }
+        }
+
         // This iframe acts as a bridge for cross-domain authentication and API calls
         (function () {
             const params = new URLSearchParams(window.location.search);
@@ -162,6 +176,12 @@
 
                             const data = await apiCall(`/api/v1/sites/comments?${params}`);
 
+                            // Track widget load
+                            trackWidget('widget_comments_loaded', {
+                                domain: message.domain,
+                                comment_count: data.comments?.length || 0
+                            });
+
                             window.parent.postMessage({
                                 type: 'commentkit',
                                 action: 'commentsLoaded',
@@ -213,6 +233,13 @@
                                     message: data.error
                                 }, CONFIG.parentOrigin);
                             } else {
+                                // Track comment posted
+                                trackWidget('widget_comment_posted', {
+                                    is_authenticated: !!currentUser,
+                                    is_reply: !!message.parent_id,
+                                    domain: message.domain
+                                });
+
                                 window.parent.postMessage({
                                     type: 'commentkit',
                                     action: 'commentPosted',
@@ -232,6 +259,12 @@
                                         redirect_url: message.redirectUrl || null
                                     })
                                 });
+
+                                // Track magic link sent
+                                trackWidget('widget_magic_link_sent', {
+                                    email_domain: message.email?.split('@')[1]
+                                });
+
                                 window.parent.postMessage({
                                     type: 'commentkit',
                                     action: 'loginEmailSent',
@@ -265,6 +298,12 @@
                                 const result = await apiCall(`/api/v1/auth/verify?token=${encodeURIComponent(message.token)}`);
                                 if (result.user) {
                                     currentUser = result.user;
+
+                                    // Track successful authentication
+                                    trackWidget('widget_user_authenticated', {
+                                        user_email_domain: result.user.email?.split('@')[1]
+                                    });
+
                                     sendAuthState();
                                 }
                             } catch (e) {
@@ -293,6 +332,10 @@
                                 // Ignore logout errors
                             }
                             currentUser = null;
+
+                            // Track logout
+                            trackWidget('widget_user_logged_out');
+
                             sendAuthState();
                             break;
                         }

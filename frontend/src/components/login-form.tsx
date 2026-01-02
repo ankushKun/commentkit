@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { trackEvent, Events } from '@/lib/analytics';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -62,6 +63,11 @@ export function LoginForm() {
 
         if (result.success) {
             setSent(true);
+            // Track successful magic link request
+            trackEvent(Events.USER_LOGGED_IN, {
+                method: 'magic_link',
+                email_domain: email.split('@')[1]
+            });
         } else {
             setError(result.error || 'Failed to send magic link');
         }

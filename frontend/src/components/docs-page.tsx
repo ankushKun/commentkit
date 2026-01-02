@@ -14,6 +14,7 @@ import {
   Zap
 } from "lucide-react";
 import { cn } from "../lib/utils";
+import { trackEvent } from "../lib/analytics";
 
 // --- Components ---
 
@@ -24,6 +25,11 @@ function CodeBlock({ code, language = "html" }: { code: string; language?: strin
     navigator.clipboard.writeText(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+    // Track code copy
+    trackEvent('docs_code_copied', {
+      language,
+      code_length: code.length
+    });
   };
 
   return (
@@ -92,7 +98,12 @@ function FrameworkTabs() {
           return (
             <button
               key={tab.id}
-              onClick={() => setActive(tab.id as any)}
+              onClick={() => {
+                setActive(tab.id as any);
+                trackEvent('docs_framework_tab_clicked', {
+                  framework: tab.id
+                });
+              }}
               className={cn(
                 "flex items-center gap-2 px-6 py-4 text-sm font-medium border-r border-border transition-all hover:bg-muted/50",
                 active === tab.id
@@ -207,8 +218,19 @@ export function DocsPage() {
       element.scrollIntoView({ behavior: "smooth" });
       setActiveSection(id);
       setMobileMenuOpen(false);
+      // Track section navigation
+      trackEvent('docs_section_viewed', {
+        section_id: id
+      });
     }
   };
+
+  // Track initial page view
+  React.useEffect(() => {
+    trackEvent('docs_page_viewed', {
+      initial_section: 'introduction'
+    });
+  }, []);
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row">

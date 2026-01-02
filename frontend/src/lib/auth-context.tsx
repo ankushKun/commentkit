@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef, type ReactNode } from 'react';
 import { auth, type User, type BootstrapData, setCsrfToken } from './api';
+import { identifyUser, setUserProperties, trackEvent, Events, resetUser } from './analytics';
 
 interface AuthContextType {
     user: User | null;
@@ -40,6 +41,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Set user without bootstrap property
             const { bootstrap: _, ...userData } = data;
             setUser(userData);
+            // Track user in analytics
+            if (userData.id && userData.email) {
+                identifyUser(userData.id.toString(), {
+                    email: userData.email,
+                    created_at: userData.created_at
+                });
+            }
         }
         setLoading(false);
     };
@@ -60,6 +68,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     }
                     // No need to store token - server sets HttpOnly cookie
                     setUser(data.user);
+
+                    // Track successful authentication
+                    if (data.user.id && data.user.email) {
+                        identifyUser(data.user.id.toString(), {
+                            email: data.user.email,
+                            created_at: data.user.created_at
+                        });
+                        trackEvent(Events.USER_LOGGED_IN, {
+                            method: 'magic_link_verified',
+                            redirect_url: redirectUrl || null
+                        });
+                    }
 
                     // Redirect to the original page if specified
                     if (redirectUrl) {
@@ -86,11 +106,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const logout = async () => {
+        // Track logout before clearing user data
+        trackEvent(Events.USER_LOGGED_OUT);
         // Server will clear HttpOnly cookie
         await auth.logout();
         setUser(null);
         setCsrfToken(null);
         bootstrapRef.current = null;
+        // Reset analytics user
+        resetUser();
     };
 
     const updateUser = (updatedUser: User) => {
